@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Budget" />
+<meta name="theme-color" content="#F4F5F7" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<link rel="icon" type="image/png" href="icon-192.png" />
+<title>Budget</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.2/babel.min.js"></script>
+<style>
+  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #F4F5F7;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  input, button, select, textarea { font-family: inherit; }
+  #loading { padding: 40px 20px; text-align: center; color: #5A6784; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="root"><div id="loading">Carico il Budget…</div></div>
+<script type="text/babel" data-presets="react">
+
+const { useState, useEffect, useMemo } = React;
+
+// ---- Shim icone (stile lucide, SVG inline) ----
+const _mk = (inner) => (props) => {
+  const { size = 24, color, strokeWidth = 2, ...rest } = props || {};
+  return React.createElement("svg", {
+    width: size, height: size, viewBox: "0 0 24 24", fill: "none",
+    stroke: color || "currentColor", strokeWidth,
+    strokeLinecap: "round", strokeLinejoin: "round",
+    dangerouslySetInnerHTML: { __html: inner }, ...rest,
+  });
+};
+const Plus = _mk('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>');
+const Trash2 = _mk('<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>');
+const Check = _mk('<polyline points="20 6 9 17 4 12"/>');
+const Wallet = _mk('<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>');
+const CalendarDays = _mk('<rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/>');
+const Landmark = _mk('<line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/>');
+const TrendingUp = _mk('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>');
+const CreditCard = _mk('<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>');
+const PieChart = _mk('<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>');
+const Upload = _mk('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>');
+
+// ---- Storage: usa localStorage con la stessa API di window.storage ----
+if (!window.storage) {
+  window.storage = {
+    get: async (k) => { const v = localStorage.getItem(k); return v == null ? null : { value: v }; },
+    set: async (k, v) => { localStorage.setItem(k, v); return { key: k, value: v }; },
+    delete: async (k) => { localStorage.removeItem(k); return { key: k, deleted: true }; },
+    list: async (p) => ({ keys: Object.keys(localStorage).filter((k) => !p || k.startsWith(p)) }),
+  };
+}
+const STORAGE_KEY = "budget:data";
+
+
+// ---- Palette (ledger / strumento di precisione) ----
+const C = {
+  paper: "#F4F5F7",
+  surface: "#FFFFFF",
+  ink: "#17233B",
+  inkSoft: "#5A6784",
+  line: "#E4E7ED",
+  gold: "#B67B1E",
+  goldSoft: "#F5EAD2",
+  pos: "#1F7A54",
+  neg: "#B23A2E",
+};
+
+const MESI = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+
+const uid = () => Math.random().toString(36).slice(2, 9);
+
+// ---- Template iniziale (vuoto: nessun dato personale nel codice sorgente) ----
+const SPESE_DEFAULT = [
+  "Tari","Disney +","TIM servizio","Vodafone","Mutuo",
+  "Apple Music","Netflix","Amazon Prime","Assicurazione","Macchina",
+  "Asilo","Inglese","Luce","Gas","Microsoft","ChatGPT",
+  "Bollo","Acqua","Investimenti","Revolut","iCloud",
+].map((name) => ({ id: uid(), name, amount: "" }));
+
+// anni disponibili (nessun importo precompilato: li inserisci tu)
+const ETICHETTE = ["2020","2021","2022","2023","2024","2025","2026"];
+
+const ANNI_DEFAULT = ETICHETTE.map((label) => ({
+  id: uid(),
+  label,
+  months: MESI.map(() => ""),
+}));
+const CORRENTE_DEFAULT_ID = ANNI_DEFAULT[ANNI_DEFAULT.length - 1].id;
+
+// ---- Conti: soglie di riferimento ----
+const WEBANK_FLOOR = 10000;   // sotto questa cifra intacchi il fondo emergenza vero
+const WEBANK_TARGET = 13000;  // obiettivo a inizio mese
+const REVOLUT_CAP = 500;      // budget mensile Amazon/prenotazioni
+
+const meseAnnoCorrente = () => `${MESI[new Date().getMonth()]} ${new Date().getFullYear()}`;
+
+const LEDGER_DEFAULT = [
+  { id: uid(), label: meseAnnoCorrente(), webank: "", trIn: "", trOut: "", revolut: "" },
+];
+
+// ---- Analisi mensile: categorie di spesa variabile ----
+const CATEGORIE = [
+  "Ristoranti/Delivery", "Viaggi/Trasporti/Svago", "Alimentari", "Shopping/Abbigliamento",
+  "Casa/Fai-da-te/Elettro", "Animali", "Carburante", "Digitale/Abbonamenti",
+  "Utenze", "Casa/Mutuo/Affitto", "Telefonia/Internet", "Assicurazioni", "Istruzione/Asilo", "Salute", "Altro",
+];
+const CAT_COLORI = [
+  "#B67B1E", "#2F6DB0", "#2E7D5B", "#B23A2E", "#7A4E8C", "#C99A3B", "#5A6784", "#3B9C9C",
+  "#8A5A2E", "#4C6EF5", "#D08770", "#68997A", "#A65A78", "#5E81AC", "#9AA3B2",
+];
+const catColor = (cat) => {
+  const i = CATEGORIE.indexOf(cat);
+  return i >= 0 ? CAT_COLORI[i] : "#9AA3B2";
+};
+
+// mese di partenza vuoto: importa il tuo primo CSV per popolarlo
+const ANALISI_DEFAULT = [
+  {
+    id: uid(),
+    label: meseAnnoCorrente(),
+    rows: CATEGORIE.slice(0, 8).map((cat) => ({ id: uid(), cat, amount: "" })),
+  },
+];
+
+// ---- Helpers ----
+const parse = (s) => {
+  if (s == null || String(s).trim() === "") return null;
+  const v = parseFloat(String(s).replace(/\s/g, "").replace(",", "."));
+  return isNaN(v) ? null : v;
+};
+const fmt0 = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const fmt2 = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const mediaAnno = (year) => {
+  const vals = year.months.map(parse).filter((v) => v != null);
+  if (vals.length === 0) return { avg: null, count: 0 };
+  return { avg: vals.reduce((a, b) => a + b, 0) / vals.length, count: vals.length };
+};
+
+// ==== MOTORE IMPORT CSV ====
+
+// Pulizia importo: gestisce formato italiano "1.234,56", parentesi, segno, valuta
+function cleanNum(s) {
+  if (s == null) return 0;
+  let t = String(s).trim();
+  if (!t) return 0;
+  const neg = t.includes("(") || t.trim().startsWith("-");
+  t = t.replace(/[()€$\s]/g, "").replace(/[A-Za-z]/g, "");
+  if (t.includes(",") && t.includes(".")) t = t.replace(/\./g, "").replace(",", ".");
+  else if (t.includes(",")) t = t.replace(",", ".");
+  t = t.replace(/[^0-9.\-]/g, "");
+  let v = parseFloat(t);
+  if (isNaN(v)) v = 0;
+  v = Math.abs(v);
+  return neg ? -v : v;
+}
+
+// Movimenti da NON contare come spesa (giroconti, ricariche, investimenti, stipendio, commissioni)
+const INTERNAL = [
+  "robo portfolio", "savings plan", "piano di accumulo", "to trading", "to eur", "vault", "to pocket",
+  "top-up", "topup", "ricarica di apple pay", "apple pay con", "pagamento da", "transfer inbound",
+  "ciafrei fabrizio", "interest payment", "interess", "canone piano metal", "commission", "cambio valuta",
+  "exchange", "giroconto", "trade republic", "revolut", "bonifico a", "stipendio", "accredito stipend",
+  "emolument", "pensione", "girofondo",
+];
+
+// Regole categoria: primo match vince (l'ordine conta)
+const RULES = [
+  ["Digitale/Abbonamenti", ["apple.com", "itunes", "icloud", "apple ", "netflix", "spotify", "disney", "microsoft", "chatgpt", "openai", "google", "dropbox", "adobe", "amazon prime", "disney +"]],
+  ["Ristoranti/Delivery", ["justeat", "just eat", "deliveroo", "glovo", "sushi", "ijy", "pesce baracca", "brunch", "lentisco", "la riva", "branzo", "brio di lapi", "ristorant", "pizzeri", "osteria", "trattoria", "mcdonald", "burger", "gelateri"]],
+  ["Alimentari", ["coop", "unicoop", "conad", "esselunga", "lidl", "eurospin", "carrefour", "ciampalini", "macelleri", "panific", "supermerc", "penny", "aldi"]],
+  ["Carburante", ["enistation", "eni station", "q8", "tamoil", "esso", "benzin", "carburant", "distributore carb"]],
+  ["Animali", ["veterinar", "oh my dog", "zooplus", "arcaplanet"]],
+  ["Salute", ["farmaci", "parafarmac", "dentist", "ospedale", "analisi clinic", "centro medico", "poliambulator", "medico"]],
+  ["Telefonia/Internet", ["tim servizio", "tim ", "vodafone", "windtre", "wind tre", "iliad", "fastweb", "tiscali"]],
+  ["Utenze", ["enel", "a2a", "hera", "iren", "acea", "estra", "sorgenia", "servizio idrico", "acquedotto", "nettezza", "tari", "luce", "gas ", "acqua"]],
+  ["Casa/Mutuo/Affitto", ["mutuo", "affitto", "condominio"]],
+  ["Assicurazioni", ["assicuraz", "allianz", "generali", "unipol", "axa", "polizza", "genertel", "bollo"]],
+  ["Istruzione/Asilo", ["asilo", "scuola", "retta", "inglese", "corso ", "universit"]],
+  ["Casa/Fai-da-te/Elettro", ["obi", "leroy", "bricoman", "ikea", "sharkninja", "heylight", "hurom", "mediaworld", "unieuro", "euronics", "ferramenta", "moto cicli"]],
+  ["Viaggi/Trasporti/Svago", ["hotel", "b&b", "trenitalia", "trenit", "italo", "ryanair", "easyjet", "ita airways", "booking", "airbnb", "radio taxi", "taxi", "uber", "calaserena", "resort", "cus ", "apt cagliari", "dropticket", "autostrad", "telepass", "parcheggi", "cinema"]],
+  ["Shopping/Abbigliamento", ["amazon", "privalia", "zalando", "zara", "h&m", "feltrinelli", "decathlon", "shein", "nike", "adidas"]],
+];
+
+function isInternal(desc) {
+  const d = (desc || "").toLowerCase();
+  return INTERNAL.some((k) => d.includes(k));
+}
+function classify(desc) {
+  const d = (desc || "").toLowerCase();
+  for (const [cat, keys] of RULES) if (keys.some((k) => d.includes(k))) return cat;
+  return "Altro";
+}
+
+function detectSource(headers) {
+  const h = headers.map((x) => String(x).toLowerCase().trim());
+  const has = (k) => h.includes(k);
+  if (has("transaction_id") && has("asset_class")) return "tr";
+  if (has("amount") && has("type") && has("description") && (has("balance") || has("product") || has("started date") || has("completed date")))
+    return "revolut";
+  return "generic";
+}
+
+// Normalizza le righe in {desc, amount} (amount negativo = uscita)
+function normalize(source, rows) {
+  if (source === "tr") {
+    return rows
+      .filter((r) => (r.type || "") === "CARD_TRANSACTION")
+      .map((r) => ({ desc: r.name || r.description || "", amount: cleanNum(r.amount) }));
+  }
+  if (source === "revolut") {
+    return rows
+      .filter((r) => !r.State || String(r.State).toUpperCase() === "COMPLETED")
+      .map((r) => ({ desc: r.Description || "", amount: cleanNum(r.Amount) }));
+  }
+  return [];
+}
+
+function aggregate(norm) {
+  const totals = {};
+  let excluded = 0, count = 0;
+  const altro = [];
+  for (const { desc, amount } of norm) {
+    if (!amount) { excluded++; continue; }
+    if (isInternal(desc)) { excluded++; continue; }
+    const cat = classify(desc);
+    totals[cat] = (totals[cat] || 0) + -amount; // uscita(neg)->+spesa ; entrata(pos)->rimborso(-)
+    count++;
+    if (cat === "Altro") altro.push({ desc, amount });
+  }
+  for (const k of Object.keys(totals)) totals[k] = Math.round(totals[k] * 100) / 100;
+  return { totals, excluded, count, altro };
+}
+
+function guessMapping(headers) {
+  const find = (re) => headers.find((x) => re.test(String(x))) || "";
+  const dateCol = find(/data|date/i);
+  const descCol = find(/descriz|causale|dettagli|operazione|description|movimento/i);
+  const outCol = find(/uscit|dare|addebit|debit/i);
+  const inCol = find(/entrat|avere|accredit|credit/i);
+  const amtCol = find(/importo|amount|saldo movimento/i);
+  const amtMode = outCol && inCol ? "split" : "single";
+  return { dateCol, descCol, amtCol: amtCol || outCol || "", outCol, inCol, amtMode };
+}
+
+function aggregateGeneric(rows, m) {
+  const norm = rows.map((r) => {
+    const desc = r[m.descCol] || "";
+    let amount;
+    if (m.amtMode === "split") {
+      const out = Math.abs(cleanNum(r[m.outCol]));
+      const inn = Math.abs(cleanNum(r[m.inCol]));
+      amount = inn - out;
+    } else {
+      amount = cleanNum(r[m.amtCol]);
+    }
+    return { desc, amount };
+  });
+  return aggregate(norm);
+}
+
+const SOURCE_LABEL = { tr: "Trade Republic", revolut: "Revolut", generic: "Generico / Webank" };
+
+// ==== IMPORT "CARICA SITUAZIONE" (spese fisse + storico stipendi da CSV) ====
+// Formato atteso per riga: Nome;Importo;(note);Mese;anno1;anno2;...;annoN
+// Righe senza nome o senza mese vengono ignorate dove non pertinenti.
+const MESI_LC = MESI.map((m) => m.toLowerCase());
+
+function parseHistoryCSV(rowsArr) {
+  const expenses = [];
+  const monthData = {}; // monthIndex -> array valori per colonna anno
+  let maxCols = 0;
+  for (const cells of rowsArr) {
+    if (!cells || cells.length < 2) continue;
+    const name = (cells[0] || "").toString().trim();
+    const amountRaw = cells[1] != null ? String(cells[1]).trim() : "";
+    const month = (cells[3] || "").toString().trim().toLowerCase();
+    const monthIdx = MESI_LC.indexOf(month);
+    if (name) expenses.push({ name, amount: amountRaw });
+    if (monthIdx >= 0) {
+      const vals = cells.slice(4).map((v) => (v == null ? "" : String(v).trim()));
+      monthData[monthIdx] = vals;
+      maxCols = Math.max(maxCols, vals.length);
+    }
+  }
+  const monthIdxs = Object.keys(monthData);
+  if (monthIdxs.length === 0 || maxCols === 0) return { expenses, years: [], yearLabels: [] };
+  const nowY = new Date().getFullYear();
+  const yearLabels = Array.from({ length: maxCols }, (_, i) => String(nowY - maxCols + 1 + i));
+  const years = yearLabels.map((label, j) => ({
+    label,
+    months: MESI.map((_, mi) => {
+      const vals = monthData[mi];
+      const v = vals && vals[j];
+      return v && v !== "" ? v : "";
+    }),
+  }));
+  return { expenses, years, yearLabels };
+}
+
+function App() {
+  const [expenses, setExpenses] = useState(SPESE_DEFAULT);
+  const [years, setYears] = useState(ANNI_DEFAULT);
+  const [currentYearId, setCurrentYearId] = useState(CORRENTE_DEFAULT_ID);
+  const [ledger, setLedger] = useState(LEDGER_DEFAULT);
+  const [analyses, setAnalyses] = useState(ANALISI_DEFAULT);
+  const [selAnalysis, setSelAnalysis] = useState(ANALISI_DEFAULT[0].id);
+  const [imp, setImp] = useState(null); // {fileName, source, headers, rows, preview, mapping, needsMapping}
+  const [impTarget, setImpTarget] = useState("new");
+  const [impLabel, setImpLabel] = useState("");
+  const [impMsg, setImpMsg] = useState("");
+  const [hist, setHist] = useState(null); // {fileName, expenses, years, yearLabels}
+  const [histMsg, setHistMsg] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // carica
+  useEffect(() => {
+    (async () => {
+      try {
+        if (typeof window !== "undefined" && window.storage) {
+          const r = await window.storage.get("budget:data");
+          if (r && r.value) {
+            const d = JSON.parse(r.value);
+            if (d.expenses) setExpenses(d.expenses);
+            if (d.years) setYears(d.years);
+            if (d.currentYearId) setCurrentYearId(d.currentYearId);
+            if (d.ledger) setLedger(d.ledger);
+            if (d.analyses) { setAnalyses(d.analyses); if (d.analyses[0]) setSelAnalysis(d.analyses[0].id); }
+          }
+        }
+      } catch (e) { /* nessun dato salvato: uso i default */ }
+      setLoaded(true);
+    })();
+  }, []);
+
+  // salva (debounce)
+  useEffect(() => {
+    if (!loaded || typeof window === "undefined" || !window.storage) return;
+    const t = setTimeout(async () => {
+      try {
+        await window.storage.set("budget:data", JSON.stringify({ expenses, years, currentYearId, ledger, analyses }));
+        setSaved(true);
+        setTimeout(() => setSaved(false), 1400);
+      } catch (e) {}
+    }, 450);
+    return () => clearTimeout(t);
+  }, [expenses, years, currentYearId, ledger, analyses, loaded]);
+
+  const fixedTotal = useMemo(
+    () => expenses.reduce((s, e) => s + (parse(e.amount) || 0), 0),
+    [expenses]
+  );
+
+  const currentYear = years.find((y) => y.id === currentYearId) || years[years.length - 1];
+  const currentAvg = currentYear ? mediaAnno(currentYear) : { avg: null, count: 0 };
+
+  // media pluriennale = media delle medie dei singoli anni, esclusi l'anno corrente e gli anni vuoti
+  const pluri = useMemo(() => {
+    const medie = years
+      .filter((y) => y.id !== currentYearId)
+      .map((y) => mediaAnno(y).avg)
+      .filter((v) => v != null);
+    if (medie.length === 0) return { avg: null, count: 0 };
+    return { avg: medie.reduce((a, b) => a + b, 0) / medie.length, count: medie.length };
+  }, [years, currentYearId]);
+
+  const spesaCorrente = currentAvg.avg != null ? currentAvg.avg - fixedTotal : null;
+  const spesaPluri = pluri.avg != null ? pluri.avg - fixedTotal : null;
+  const delta = spesaCorrente != null && spesaPluri != null ? spesaCorrente - spesaPluri : null;
+
+  // ---- Rendiconto conti ----
+  const ledgerRows = useMemo(
+    () =>
+      ledger.map((r) => {
+        const trIn = parse(r.trIn);
+        const trOut = parse(r.trOut);
+        const accumulo = trIn != null && trOut != null ? trOut - trIn : null;
+        return { ...r, trIn, trOut, accumulo, webankVal: parse(r.webank), revolutVal: parse(r.revolut) };
+      }),
+    [ledger]
+  );
+  const trAccumuloTotale = ledgerRows.reduce((s, r) => s + (r.accumulo || 0), 0);
+  const ultimo = ledgerRows[ledgerRows.length - 1];
+  const webankUltimo = ultimo ? ultimo.webankVal : null;
+  const revolutUltimo = ultimo ? ultimo.revolutVal : null;
+  const webankStato =
+    webankUltimo == null
+      ? { text: "—", color: C.inkSoft }
+      : webankUltimo < WEBANK_FLOOR
+      ? { text: "sotto il fondo emergenza", color: C.neg }
+      : webankUltimo < WEBANK_TARGET
+      ? { text: "sotto obiettivo 13.000 €", color: C.gold }
+      : { text: "obiettivo raggiunto", color: C.pos };
+
+  // ---- mutazioni ----
+  const setExp = (id, field, val) =>
+    setExpenses((xs) => xs.map((e) => (e.id === id ? { ...e, [field]: val } : e)));
+  const addExp = () => setExpenses((xs) => [...xs, { id: uid(), name: "", amount: "" }]);
+  const delExp = (id) => setExpenses((xs) => xs.filter((e) => e.id !== id));
+
+  const setCell = (yid, mi, val) =>
+    setYears((ys) => ys.map((y) => (y.id === yid ? { ...y, months: y.months.map((m, i) => (i === mi ? val : m)) } : y)));
+  const setLabel = (yid, val) =>
+    setYears((ys) => ys.map((y) => (y.id === yid ? { ...y, label: val } : y)));
+  const addYear = () => {
+    const nums = years.map((y) => parseInt(y.label, 10)).filter((n) => !isNaN(n));
+    const next = nums.length ? Math.max(...nums) + 1 : new Date().getFullYear();
+    setYears((ys) => [...ys, { id: uid(), label: String(next), months: MESI.map(() => "") }]);
+  };
+  const delYear = (yid) => {
+    if (years.length <= 1) return;
+    const isCurrent = yid === currentYearId;
+    setYears((ys) => {
+      const nn = ys.filter((y) => y.id !== yid);
+      if (isCurrent && nn.length) setCurrentYearId(nn[nn.length - 1].id);
+      return nn;
+    });
+  };
+
+  const setLedgerField = (id, field, val) =>
+    setLedger((ls) => ls.map((r) => (r.id === id ? { ...r, [field]: val } : r)));
+  const addLedgerRow = () =>
+    setLedger((ls) => [...ls, { id: uid(), label: "", webank: "", trIn: "", trOut: "", revolut: "" }]);
+  const delLedgerRow = (id) => setLedger((ls) => ls.filter((r) => r.id !== id));
+
+  // ---- Analisi mensile ----
+  const analysisTotal = (a) => a.rows.reduce((s, r) => s + (parse(r.amount) || 0), 0);
+  const trend = useMemo(() => analyses.map((a) => ({ id: a.id, label: a.label, total: analysisTotal(a) })), [analyses]);
+  const trendMax = Math.max(1, ...trend.map((t) => t.total));
+  const current = analyses.find((a) => a.id === selAnalysis) || analyses[0];
+  const curTotal = current ? analysisTotal(current) : 0;
+  const curRows = current
+    ? current.rows
+        .map((r) => ({ ...r, val: parse(r.amount) || 0 }))
+        .sort((a, b) => b.val - a.val)
+    : [];
+
+  const addAnalysis = () => {
+    const a = { id: uid(), label: "", rows: CATEGORIE.slice(0, 8).map((cat) => ({ id: uid(), cat, amount: "" })) };
+    setAnalyses((as) => [a, ...as]);
+    setSelAnalysis(a.id);
+  };
+  const delAnalysis = (id) =>
+    setAnalyses((as) => {
+      const nn = as.filter((a) => a.id !== id);
+      if (id === selAnalysis && nn.length) setSelAnalysis(nn[0].id);
+      return nn;
+    });
+  const setAnalysisLabel = (id, label) =>
+    setAnalyses((as) => as.map((a) => (a.id === id ? { ...a, label } : a)));
+  const setRow = (aid, rid, field, val) =>
+    setAnalyses((as) => as.map((a) => (a.id === aid ? { ...a, rows: a.rows.map((r) => (r.id === rid ? { ...r, [field]: val } : r)) } : a)));
+  const addRow = (aid) =>
+    setAnalyses((as) => as.map((a) => (a.id === aid ? { ...a, rows: [...a.rows, { id: uid(), cat: "Altro", amount: "" }] } : a)));
+  const delRow = (aid, rid) =>
+    setAnalyses((as) => as.map((a) => (a.id === aid ? { ...a, rows: a.rows.filter((r) => r.id !== rid) } : a)));
+
+  // ---- Import CSV ----
+  const onFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setImpMsg("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const res = Papa.parse(String(reader.result), { header: true, skipEmptyLines: true });
+        const headers = (res.meta && res.meta.fields) || [];
+        const rows = res.data || [];
+        const source = detectSource(headers);
+        if (source === "tr" || source === "revolut") {
+          const preview = aggregate(normalize(source, rows));
+          setImp({ fileName: file.name, source, headers, rows, preview, needsMapping: false });
+        } else {
+          const mapping = guessMapping(headers);
+          setImp({ fileName: file.name, source, headers, rows, mapping, preview: null, needsMapping: true });
+        }
+        setImpLabel(current ? current.label : meseAnnoCorrente());
+        setImpTarget(current ? current.id : "new");
+      } catch (err) {
+        setImpMsg("Non sono riuscito a leggere il file. Assicurati che sia un CSV.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+  const setMap = (field, val) => setImp((s) => ({ ...s, mapping: { ...s.mapping, [field]: val } }));
+  const runGeneric = () => setImp((s) => ({ ...s, preview: aggregateGeneric(s.rows, s.mapping), needsMapping: false }));
+
+  const confirmImport = () => {
+    if (!imp || !imp.preview) return;
+    const totals = imp.preview.totals;
+    const addTo = (a) => {
+      const rows = [...a.rows];
+      for (const [cat, val] of Object.entries(totals)) {
+        if (Math.abs(val) < 0.005) continue;
+        const existing = rows.find((r) => r.cat === cat);
+        if (existing) {
+          const nv = (parse(existing.amount) || 0) + val;
+          existing.amount = String(Math.round(nv * 100) / 100).replace(".", ",");
+        } else {
+          rows.push({ id: uid(), cat, amount: String(val).replace(".", ",") });
+        }
+      }
+      return { ...a, rows };
+    };
+    if (impTarget === "new") {
+      const a = addTo({ id: uid(), label: impLabel || meseAnnoCorrente(), rows: [] });
+      setAnalyses((as) => [a, ...as]);
+      setSelAnalysis(a.id);
+    } else {
+      setAnalyses((as) => as.map((a) => (a.id === impTarget ? addTo(a) : a)));
+      setSelAnalysis(impTarget);
+    }
+    setImpMsg(`${SOURCE_LABEL[imp.source]} importato: ${imp.preview.count} movimenti aggiunti.`);
+    setImp(null);
+  };
+
+  // ---- Carica situazione: spese fisse + storico stipendi da CSV ----
+  const onHistoryFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setHistMsg("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result);
+        const rows = text.split(/\r?\n/).map((line) => line.split(";"));
+        const parsed = parseHistoryCSV(rows);
+        if (parsed.expenses.length === 0 && parsed.years.length === 0) {
+          setHistMsg("Non ho riconosciuto righe valide in questo file. Il formato atteso è: Nome;Importo;;Mese;anno1;anno2;…");
+          return;
+        }
+        setHist({ fileName: file.name, ...parsed });
+      } catch (err) {
+        setHistMsg("Non sono riuscito a leggere il file.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const confirmHistoryImport = () => {
+    if (!hist) return;
+    // spese fisse: aggiorna per nome, aggiunge se nuova, non tocca importo se il CSV lo lascia vuoto
+    setExpenses((xs) => {
+      const list = [...xs];
+      for (const h of hist.expenses) {
+        const nameKey = h.name.trim().toLowerCase();
+        const existing = list.find((x) => x.name.trim().toLowerCase() === nameKey);
+        if (existing) {
+          if (h.amount !== "") existing.amount = h.amount;
+        } else {
+          list.push({ id: uid(), name: h.name, amount: h.amount });
+        }
+      }
+      return list;
+    });
+    // stipendi: aggiorna/crea anni per etichetta, riempie solo i mesi presenti nel CSV
+    let newCurrentId = null;
+    const lastLabel = hist.years.length ? hist.years[hist.years.length - 1].label : null;
+    setYears((ys) => {
+      const list = ys.map((y) => ({ ...y, months: [...y.months] }));
+      for (const hy of hist.years) {
+        let target = list.find((y) => y.label === hy.label);
+        if (!target) {
+          target = { id: uid(), label: hy.label, months: MESI.map(() => "") };
+          list.push(target);
+        }
+        hy.months.forEach((v, mi) => { if (v !== "") target.months[mi] = v; });
+        if (hy.label === lastLabel) newCurrentId = target.id;
+      }
+      return list;
+    });
+    if (newCurrentId) setCurrentYearId(newCurrentId);
+    setHistMsg(`Caricati ${hist.expenses.length} voci di spesa e ${hist.years.length} anni di stipendi.`);
+    setHist(null);
+  };
+
+  const S = styles;
+
+  return (
+    <div style={S.page}>
+      <style>{css}</style>
+
+      <div style={S.wrap}>
+        {/* Header */}
+        <header style={S.header}>
+          <div>
+            <div style={S.kicker}>Bilancio familiare</div>
+            <h1 style={S.h1}>Potere di spesa mensile</h1>
+          </div>
+          <div style={{ ...S.saveTag, opacity: saved ? 1 : 0 }}>
+            <Check size={13} strokeWidth={3} /> Salvato
+          </div>
+        </header>
+
+        {/* CARICA SITUAZIONE */}
+        <section style={S.histPanel}>
+          <div style={S.histHead}>
+            <div>
+              <div style={S.histTitle}>Carica situazione</div>
+              <div style={S.histSub}>Spese fisse + storico stipendi da un CSV (es. esportato da Numbers/Excel)</div>
+            </div>
+            <label style={S.fileBtnGold}>
+              <Upload size={14} /> CSV
+              <input type="file" accept=".csv,text/csv" onChange={onHistoryFile} style={{ display: "none" }} />
+            </label>
+          </div>
+
+          {histMsg && !hist && <div style={S.importOk}><Check size={13} strokeWidth={3} /> {histMsg}</div>}
+
+          {hist && (
+            <div style={S.previewBox}>
+              <div style={S.previewTop}>
+                <span style={S.previewSrc}>{hist.fileName}</span>
+                <span style={S.previewMeta}>{hist.expenses.length} spese · {hist.years.length} anni</span>
+              </div>
+              <div style={S.previewList}>
+                {hist.expenses.slice(0, 6).map((e, i) => (
+                  <div key={i} style={S.previewRow}>
+                    <span style={S.previewCat}>{e.name}</span>
+                    <span style={S.previewVal}>{e.amount ? `€ ${e.amount}` : "–"}</span>
+                  </div>
+                ))}
+                {hist.expenses.length > 6 && <div style={S.previewAltro}>+ altre {hist.expenses.length - 6} voci</div>}
+              </div>
+              {hist.years.length > 0 && (
+                <div style={S.previewAltro}>
+                  Anni: {hist.years.map((y) => y.label).join(", ")}
+                </div>
+              )}
+              <div style={S.confirmRow}>
+                <button style={S.confirmBtn} onClick={confirmHistoryImport}><Check size={15} /> Carica tutto</button>
+                <button style={S.cancelBtn} onClick={() => setHist(null)}>Annulla</button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* HERO */}
+        <section style={S.hero}>
+          <div style={S.heroLabel}>
+            Ti resta ogni mese <span style={S.heroYear}>· anno {currentYear ? currentYear.label : "—"}</span>
+          </div>
+          <div style={{ ...S.heroNum, color: spesaCorrente >= 0 ? C.gold : C.neg }}>
+            {spesaCorrente != null ? fmt0.format(spesaCorrente) : "—"}
+          </div>
+          <div style={S.heroSub}>
+            <span>Media stipendio {currentAvg.avg != null ? fmt0.format(currentAvg.avg) : "—"}</span>
+            <span style={S.heroMinus}>−</span>
+            <span>Spese fisse {fmt0.format(fixedTotal)}</span>
+            {currentAvg.count > 0 && (
+              <span style={S.heroMesi}>· su {currentAvg.count} mes{currentAvg.count === 1 ? "e" : "i"}</span>
+            )}
+          </div>
+        </section>
+
+        {/* Confronto pluriennale */}
+        <section className="cmp" style={S.compareRow}>
+          <div style={S.compareCard}>
+            <div style={S.compareTop}>Media pluriennale</div>
+            <div style={S.compareBig}>{pluri.avg != null ? fmt0.format(pluri.avg) : "—"}</div>
+            <div style={S.compareSmall}>
+              {pluri.count > 0 ? `media di ${pluri.count} ann${pluri.count === 1 ? "o" : "i"} precedenti` : "nessun anno storico"}
+            </div>
+          </div>
+          <div style={S.compareCard}>
+            <div style={S.compareTop}>Potere di spesa storico</div>
+            <div style={{ ...S.compareBig, color: spesaPluri != null && spesaPluri < 0 ? C.neg : C.ink }}>
+              {spesaPluri != null ? fmt0.format(spesaPluri) : "—"}
+            </div>
+            <div style={S.compareSmall}>media storica − spese fisse</div>
+          </div>
+          <div style={S.compareCard}>
+            <div style={S.compareTop}>Anno corrente vs storico</div>
+            <div style={{ ...S.compareBig, color: delta == null ? C.ink : delta >= 0 ? C.pos : C.neg }}>
+              {delta != null ? (delta >= 0 ? "+" : "") + fmt0.format(delta) : "—"}
+            </div>
+            <div style={S.compareSmall}>{delta == null ? "—" : delta >= 0 ? "quest'anno spendi di più" : "quest'anno più stretto"}</div>
+          </div>
+        </section>
+
+        {/* SPESE FISSE */}
+        <section style={S.block}>
+          <div style={S.blockHead}>
+            <div style={S.blockTitle}><Wallet size={16} color={C.gold} /> Spese fisse mensili</div>
+            <div style={S.blockTotal}>{fmt2.format(fixedTotal)}<span style={S.perMonth}> /mese</span></div>
+          </div>
+
+          <div style={S.expList}>
+            {expenses.map((e) => (
+              <div key={e.id} style={S.expRow}>
+                <input
+                  style={S.expName}
+                  value={e.name}
+                  placeholder="Voce di spesa"
+                  onChange={(ev) => setExp(e.id, "name", ev.target.value)}
+                />
+                <div style={S.expAmtWrap}>
+                  <input
+                    style={S.expAmt}
+                    inputMode="decimal"
+                    value={e.amount}
+                    placeholder="0"
+                    onChange={(ev) => setExp(e.id, "amount", ev.target.value)}
+                  />
+                  <span style={S.eur}>€</span>
+                </div>
+                <button style={S.iconBtn} onClick={() => delExp(e.id)} aria-label="Elimina voce">
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <button style={S.addBtn} onClick={addExp}><Plus size={15} /> Aggiungi spesa</button>
+        </section>
+
+        {/* STIPENDI */}
+        <section style={S.block}>
+          <div style={S.blockHead}>
+            <div style={S.blockTitle}><CalendarDays size={16} color={C.gold} /> Stipendi per anno</div>
+            <button style={S.addYearBtn} onClick={addYear}><Plus size={14} /> Anno</button>
+          </div>
+          <p style={S.hint}>Tocca il pallino sotto un anno per impostarlo come <b>anno corrente</b>. Le medie escludono i mesi vuoti.</p>
+
+          <div style={S.tableScroll}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={{ ...S.th, ...S.thSticky }}>Mese</th>
+                  {years.map((y) => {
+                    const isCur = y.id === currentYearId;
+                    return (
+                      <th key={y.id} style={{ ...S.th, ...(isCur ? S.thCurrent : {}) }}>
+                        <input
+                          style={{ ...S.yearInput, color: isCur ? C.gold : C.ink }}
+                          value={y.label}
+                          onChange={(ev) => setLabel(y.id, ev.target.value)}
+                        />
+                        <div style={S.yearCtrls}>
+                          <button
+                            onClick={() => setCurrentYearId(y.id)}
+                            style={{ ...S.dot, ...(isCur ? S.dotOn : {}) }}
+                            aria-label="Imposta come anno corrente"
+                            title="Anno corrente"
+                          />
+                          <button style={S.yearDel} onClick={() => delYear(y.id)} aria-label="Elimina anno">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {MESI.map((mese, mi) => (
+                  <tr key={mese}>
+                    <td style={{ ...S.tdMese, ...S.thSticky }}>{mese}</td>
+                    {years.map((y) => (
+                      <td key={y.id} style={{ ...S.td, ...(y.id === currentYearId ? S.tdCurrent : {}) }}>
+                        <input
+                          style={S.cell}
+                          inputMode="numeric"
+                          value={y.months[mi]}
+                          placeholder="–"
+                          onChange={(ev) => setCell(y.id, mi, ev.target.value)}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                <tr>
+                  <td style={{ ...S.tdAvgLabel, ...S.thSticky }}>Media anno</td>
+                  {years.map((y) => {
+                    const m = mediaAnno(y);
+                    const isCur = y.id === currentYearId;
+                    return (
+                      <td key={y.id} style={{ ...S.tdAvg, ...(isCur ? S.tdAvgCurrent : {}) }}>
+                        {m.avg != null ? fmt0.format(m.avg) : "–"}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* RENDICONTO CONTI */}
+        <section style={S.block}>
+          <div style={S.blockHead}>
+            <div style={S.blockTitle}><Landmark size={16} color={C.gold} /> Rendiconto conti</div>
+            <button style={S.addYearBtn} onClick={addLedgerRow}><Plus size={14} /> Mese</button>
+          </div>
+          <p style={S.hint}>
+            Un rigo per mese. Per Trade Republic inserisci saldo a inizio e fine mese: l'accumulo lo calcolo io.
+          </p>
+
+          <div className="cmp" style={S.compareRow}>
+            <div style={S.compareCard}>
+              <div style={S.compareTop}>Webank</div>
+              <div style={S.compareBig}>{webankUltimo != null ? fmt0.format(webankUltimo) : "—"}</div>
+              <div style={{ ...S.compareSmall, color: webankStato.color, fontWeight: 600 }}>{webankStato.text}</div>
+            </div>
+            <div style={S.compareCard}>
+              <div style={S.compareTop}>Trade Republic · accumulo tot.</div>
+              <div style={{ ...S.compareBig, color: trAccumuloTotale >= 0 ? C.pos : C.neg }}>
+                {trAccumuloTotale >= 0 ? "+" : ""}{fmt0.format(trAccumuloTotale)}
+              </div>
+              <div style={S.compareSmall}>somma degli accumuli mensili</div>
+            </div>
+            <div style={S.compareCard}>
+              <div style={S.compareTop}>Revolut · ultimo mese</div>
+              <div style={{ ...S.compareBig, color: revolutUltimo != null && revolutUltimo > REVOLUT_CAP ? C.neg : C.ink }}>
+                {revolutUltimo != null ? fmt0.format(revolutUltimo) : "—"}
+              </div>
+              <div style={S.compareSmall}>tetto {fmt0.format(REVOLUT_CAP)}</div>
+            </div>
+          </div>
+
+          <div style={S.tableScroll}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={{ ...S.th, ...S.thSticky, minWidth: 96 }}>Mese</th>
+                  <th style={S.th}>Webank</th>
+                  <th style={S.th}>TR iniziale</th>
+                  <th style={S.th}>TR finale</th>
+                  <th style={S.th}>Accumulo</th>
+                  <th style={S.th}>Revolut</th>
+                  <th style={{ ...S.th, minWidth: 32 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {ledgerRows.map((r) => (
+                  <tr key={r.id}>
+                    <td style={{ ...S.tdMese, ...S.thSticky }}>
+                      <input
+                        style={S.ledgerLabel}
+                        value={r.label}
+                        placeholder="es. Agosto 2026"
+                        onChange={(ev) => setLedgerField(r.id, "label", ev.target.value)}
+                      />
+                    </td>
+                    <td style={S.td}>
+                      <input style={S.cell} inputMode="numeric" placeholder="–" value={r.webank}
+                        onChange={(ev) => setLedgerField(r.id, "webank", ev.target.value)} />
+                    </td>
+                    <td style={S.td}>
+                      <input style={S.cell} inputMode="numeric" placeholder="–" value={r.trIn}
+                        onChange={(ev) => setLedgerField(r.id, "trIn", ev.target.value)} />
+                    </td>
+                    <td style={S.td}>
+                      <input style={S.cell} inputMode="numeric" placeholder="–" value={r.trOut}
+                        onChange={(ev) => setLedgerField(r.id, "trOut", ev.target.value)} />
+                    </td>
+                    <td style={{ ...S.td, textAlign: "right", paddingRight: 10 }}>
+                      <span style={{ fontFamily: mono, fontSize: 13.5, fontWeight: 600, color: r.accumulo == null ? C.inkSoft : r.accumulo >= 0 ? C.pos : C.neg }}>
+                        {r.accumulo != null ? (r.accumulo >= 0 ? "+" : "") + fmt0.format(r.accumulo) : "–"}
+                      </span>
+                    </td>
+                    <td style={S.td}>
+                      <input style={S.cell} inputMode="numeric" placeholder="–" value={r.revolut}
+                        onChange={(ev) => setLedgerField(r.id, "revolut", ev.target.value)} />
+                    </td>
+                    <td style={{ ...S.td, textAlign: "center" }}>
+                      <button style={S.iconBtn} onClick={() => delLedgerRow(r.id)} aria-label="Elimina mese">
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* ANALISI MENSILE */}
+        <section style={S.block}>
+          <div style={S.blockHead}>
+            <div style={S.blockTitle}><PieChart size={16} color={C.gold} /> Analisi mensile</div>
+            <button style={S.addYearBtn} onClick={addAnalysis}><Plus size={14} /> Mese</button>
+          </div>
+          <p style={S.hint}>
+            Spesa variabile per categoria (Revolut + Trade Republic). Le fisse su Webank restano nella sezione in alto.
+          </p>
+
+          {/* Import CSV */}
+          <div style={S.importPanel}>
+            <div style={S.importHead}>
+              <label style={S.fileBtn}>
+                <Upload size={15} /> Importa estratto CSV
+                <input type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: "none" }} />
+              </label>
+              <span style={S.importHint}>TR · Revolut · Webank — anche uno solo</span>
+            </div>
+
+            {impMsg && <div style={S.importOk}><Check size={13} strokeWidth={3} /> {impMsg}</div>}
+
+            {imp && imp.needsMapping && (
+              <div style={S.mapBox}>
+                <div style={S.mapTitle}>Formato non riconosciuto ({imp.fileName}). Indica le colonne:</div>
+                <div style={S.mapGrid}>
+                  <label style={S.mapLbl}>Descrizione
+                    <select style={S.mapSel} value={imp.mapping.descCol} onChange={(e) => setMap("descCol", e.target.value)}>
+                      <option value="">—</option>
+                      {imp.headers.map((h) => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </label>
+                  <label style={S.mapLbl}>Importi
+                    <select style={S.mapSel} value={imp.mapping.amtMode} onChange={(e) => setMap("amtMode", e.target.value)}>
+                      <option value="single">Colonna unica (con segno)</option>
+                      <option value="split">Entrate / Uscite separate</option>
+                    </select>
+                  </label>
+                  {imp.mapping.amtMode === "single" ? (
+                    <label style={S.mapLbl}>Colonna importo
+                      <select style={S.mapSel} value={imp.mapping.amtCol} onChange={(e) => setMap("amtCol", e.target.value)}>
+                        <option value="">—</option>
+                        {imp.headers.map((h) => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </label>
+                  ) : (
+                    <>
+                      <label style={S.mapLbl}>Uscite
+                        <select style={S.mapSel} value={imp.mapping.outCol} onChange={(e) => setMap("outCol", e.target.value)}>
+                          <option value="">—</option>
+                          {imp.headers.map((h) => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                      </label>
+                      <label style={S.mapLbl}>Entrate
+                        <select style={S.mapSel} value={imp.mapping.inCol} onChange={(e) => setMap("inCol", e.target.value)}>
+                          <option value="">—</option>
+                          {imp.headers.map((h) => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                      </label>
+                    </>
+                  )}
+                </div>
+                <button style={S.addBtn} onClick={runGeneric}>Analizza</button>
+              </div>
+            )}
+
+            {imp && imp.preview && (
+              <div style={S.previewBox}>
+                <div style={S.previewTop}>
+                  <span style={S.previewSrc}>{SOURCE_LABEL[imp.source]}</span>
+                  <span style={S.previewMeta}>{imp.preview.count} movimenti · {imp.preview.excluded} interni esclusi</span>
+                </div>
+                <div style={S.previewList}>
+                  {Object.entries(imp.preview.totals).sort((a, b) => b[1] - a[1]).map(([cat, val]) => (
+                    <div key={cat} style={S.previewRow}>
+                      <span style={{ ...S.dotCat, background: catColor(cat) }} />
+                      <span style={S.previewCat}>{cat}</span>
+                      <span style={S.previewVal}>{fmt2.format(val)}</span>
+                    </div>
+                  ))}
+                </div>
+                {imp.preview.altro.length > 0 && (
+                  <div style={S.previewAltro}>{imp.preview.altro.length} movimenti finiti in "Altro" — potrai riclassificarli a mano dopo.</div>
+                )}
+                <div style={S.targetRow}>
+                  <select style={S.mapSel} value={impTarget} onChange={(e) => setImpTarget(e.target.value)}>
+                    {analyses.map((a) => <option key={a.id} value={a.id}>Aggiungi a: {a.label || "(senza nome)"}</option>)}
+                    <option value="new">➕ Nuovo mese…</option>
+                  </select>
+                  {impTarget === "new" && (
+                    <input style={S.targetInput} value={impLabel} placeholder="es. Agosto 2026" onChange={(e) => setImpLabel(e.target.value)} />
+                  )}
+                </div>
+                <div style={S.confirmRow}>
+                  <button style={S.confirmBtn} onClick={confirmImport}><Check size={15} /> Aggiungi al mese</button>
+                  <button style={S.cancelBtn} onClick={() => setImp(null)}>Annulla</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Trend: totale spesa per mese */}
+          {trend.length > 1 && (
+            <div style={S.trendWrap}>
+              {trend.map((t) => (
+                <button key={t.id} style={S.trendCol} onClick={() => setSelAnalysis(t.id)}>
+                  <div style={S.trendBarTrack}>
+                    <div style={{ ...S.trendBar, height: `${Math.max(4, (t.total / trendMax) * 100)}%`, background: t.id === selAnalysis ? C.gold : "#D7DBE3" }} />
+                  </div>
+                  <div style={{ ...S.trendLabel, color: t.id === selAnalysis ? C.ink : C.inkSoft }}>
+                    {(t.label || "—").split(" ")[0].slice(0, 3)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Tab mesi */}
+          <div style={S.tabRow}>
+            {analyses.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => setSelAnalysis(a.id)}
+                style={{ ...S.tab, ...(a.id === selAnalysis ? S.tabOn : {}) }}
+              >
+                {a.label || "Senza nome"}
+              </button>
+            ))}
+          </div>
+
+          {current && (
+            <div>
+              <div style={S.analysisHead}>
+                <input
+                  style={S.analysisLabel}
+                  value={current.label}
+                  placeholder="es. Agosto 2026"
+                  onChange={(ev) => setAnalysisLabel(current.id, ev.target.value)}
+                />
+                <div style={S.analysisTotalBox}>
+                  <span style={S.analysisTotalLbl}>totale</span>
+                  <span style={S.analysisTotal}>{fmt2.format(curTotal)}</span>
+                </div>
+                <button style={S.iconBtn} onClick={() => delAnalysis(current.id)} aria-label="Elimina mese">
+                  <Trash2 size={15} />
+                </button>
+              </div>
+
+              {/* Righe categoria con barra % */}
+              <div style={{ marginTop: 6 }}>
+                {curRows.map((r) => {
+                  const pct = curTotal > 0 ? (r.val / curTotal) * 100 : 0;
+                  return (
+                    <div key={r.id} style={S.catRow}>
+                      <div style={S.catTop}>
+                        <select
+                          style={S.catSelect}
+                          value={CATEGORIE.includes(r.cat) ? r.cat : "Altro"}
+                          onChange={(ev) => setRow(current.id, r.id, "cat", ev.target.value)}
+                        >
+                          {CATEGORIE.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <div style={S.catAmtWrap}>
+                          <input
+                            style={S.catAmt}
+                            inputMode="decimal"
+                            value={r.amount}
+                            placeholder="0"
+                            onChange={(ev) => setRow(current.id, r.id, "amount", ev.target.value)}
+                          />
+                          <span style={S.eur}>€</span>
+                          <span style={S.catPct}>{pct.toFixed(0)}%</span>
+                          <button style={S.iconBtnSm} onClick={() => delRow(current.id, r.id)} aria-label="Elimina categoria">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                      <div style={S.barTrack}>
+                        <div style={{ ...S.bar, width: `${pct}%`, background: catColor(r.cat) }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button style={S.addBtn} onClick={() => addRow(current.id)}><Plus size={15} /> Aggiungi categoria</button>
+            </div>
+          )}
+        </section>
+
+        <footer style={S.footer}>I dati restano salvati su questo dispositivo. Aggiungi la pagina alla schermata Home per aprirla come un'app.</footer>
+      </div>
+    </div>
+  );
+}
+
+const css = `
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+* { box-sizing: border-box; }
+input { font-family: inherit; outline: none; border: none; background: transparent; }
+input:focus { outline: none; }
+.bx input:focus { background: #FBF6EA; }
+button { cursor: pointer; font-family: inherit; }
+::placeholder { color: #AEB6C4; }
+@media (max-width: 620px) {
+  .cmp { grid-template-columns: 1fr !important; }
+  .hn { font-size: 44px !important; }
+}
+`;
+
+const mono = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
+const sans = "'IBM Plex Sans', system-ui, -apple-system, sans-serif";
+
+const styles = {
+  page: { minHeight: "100vh", background: C.paper, fontFamily: sans, color: C.ink, padding: "20px 14px 48px" },
+  wrap: { maxWidth: 860, margin: "0 auto" },
+
+  header: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 },
+  kicker: { fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", color: C.gold },
+  h1: { fontSize: 22, fontWeight: 700, margin: "3px 0 0", letterSpacing: -0.3 },
+  saveTag: { display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: C.pos, transition: "opacity .3s", background: "#E9F4EE", padding: "4px 9px", borderRadius: 20 },
+
+  hero: { background: C.ink, borderRadius: 18, padding: "26px 26px 24px", color: "#fff", boxShadow: "0 12px 30px -14px rgba(23,35,59,.5)" },
+  heroLabel: { fontSize: 13, color: "#AEB9CE", fontWeight: 500 },
+  heroYear: { color: C.gold, fontWeight: 600 },
+  heroNum: { className: "hn", fontFamily: mono, fontSize: 58, fontWeight: 600, lineHeight: 1, margin: "10px 0 14px", letterSpacing: -1, fontVariantNumeric: "tabular-nums" },
+  heroSub: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 13, color: "#C6CFDE", fontFamily: mono },
+  heroMinus: { color: C.gold, fontWeight: 700 },
+  heroMesi: { color: "#8593AB" },
+
+  compareRow: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, margin: "10px 0 22px" },
+  compareCard: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: "13px 14px" },
+  compareTop: { fontSize: 11, fontWeight: 600, color: C.inkSoft, textTransform: "uppercase", letterSpacing: .6 },
+  compareBig: { fontFamily: mono, fontSize: 22, fontWeight: 600, margin: "6px 0 2px", fontVariantNumeric: "tabular-nums" },
+  compareSmall: { fontSize: 11.5, color: C.inkSoft },
+
+  block: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 16, padding: 18, marginBottom: 18 },
+  blockHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  blockTitle: { display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: 700 },
+  blockTotal: { fontFamily: mono, fontSize: 18, fontWeight: 600, color: C.ink, fontVariantNumeric: "tabular-nums" },
+  perMonth: { fontSize: 12, color: C.inkSoft, fontWeight: 500 },
+
+  expList: { display: "flex", flexDirection: "column", gap: 4 },
+  expRow: { display: "flex", alignItems: "center", gap: 8, padding: "2px 0", borderBottom: `1px solid #F0F2F5`, className: "bx" },
+  expName: { flex: 1, fontSize: 14.5, fontWeight: 500, color: C.ink, padding: "8px 8px", borderRadius: 7 },
+  expAmtWrap: { display: "flex", alignItems: "center", gap: 3, background: "#F7F8FA", borderRadius: 8, padding: "0 9px 0 4px" },
+  expAmt: { width: 78, textAlign: "right", fontFamily: mono, fontSize: 14.5, fontWeight: 500, color: C.ink, padding: "8px 2px", fontVariantNumeric: "tabular-nums" },
+  eur: { fontSize: 13, color: C.inkSoft, fontFamily: mono },
+  iconBtn: { display: "grid", placeItems: "center", width: 30, height: 30, borderRadius: 8, background: "transparent", color: "#C2C8D2", border: "none" },
+
+  addBtn: { display: "flex", alignItems: "center", gap: 6, marginTop: 12, padding: "9px 14px", fontSize: 13.5, fontWeight: 600, color: C.gold, background: C.goldSoft, border: "none", borderRadius: 9 },
+
+  hint: { fontSize: 12.5, color: C.inkSoft, margin: "-4px 0 14px", lineHeight: 1.5 },
+  addYearBtn: { display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", fontSize: 13, fontWeight: 600, color: C.ink, background: "#EEF0F4", border: "none", borderRadius: 8 },
+
+  tableScroll: { overflowX: "auto", margin: "0 -18px", padding: "0 18px 4px" },
+  table: { borderCollapse: "separate", borderSpacing: 0, width: "100%" },
+  th: { padding: "6px 6px 8px", minWidth: 84, verticalAlign: "top", borderBottom: `2px solid ${C.line}` },
+  thSticky: { position: "sticky", left: 0, background: C.surface, zIndex: 2 },
+  thCurrent: { background: C.goldSoft },
+  yearInput: { width: 66, textAlign: "center", fontFamily: mono, fontSize: 14, fontWeight: 600, padding: "3px 2px", borderRadius: 6 },
+  yearCtrls: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 4 },
+  dot: { width: 14, height: 14, borderRadius: "50%", border: `2px solid #C7CEDA`, background: "#fff", padding: 0 },
+  dotOn: { border: `2px solid ${C.gold}`, background: C.gold, boxShadow: `0 0 0 3px ${C.goldSoft}` },
+  yearDel: { display: "grid", placeItems: "center", width: 20, height: 20, borderRadius: 5, background: "transparent", color: "#C2C8D2", border: "none" },
+
+  tdMese: { padding: "3px 10px 3px 2px", fontSize: 13, fontWeight: 500, color: C.inkSoft, whiteSpace: "nowrap", borderBottom: `1px solid #F2F4F7` },
+  td: { padding: "2px 3px", borderBottom: `1px solid #F2F4F7` },
+  tdCurrent: { background: "#FCF7EC" },
+  cell: { width: 78, textAlign: "right", fontFamily: mono, fontSize: 13.5, color: C.ink, padding: "8px 8px", borderRadius: 6, fontVariantNumeric: "tabular-nums" },
+
+  tdAvgLabel: { padding: "10px 10px 8px 2px", fontSize: 12, fontWeight: 700, color: C.ink, textTransform: "uppercase", letterSpacing: .4, borderTop: `2px solid ${C.line}` },
+  tdAvg: { padding: "10px 8px 8px", textAlign: "right", fontFamily: mono, fontSize: 13.5, fontWeight: 600, color: C.inkSoft, borderTop: `2px solid ${C.line}`, fontVariantNumeric: "tabular-nums" },
+  tdAvgCurrent: { color: C.gold, background: "#FCF7EC" },
+
+  footer: { fontSize: 12, color: C.inkSoft, textAlign: "center", marginTop: 6, lineHeight: 1.5 },
+
+  ledgerLabel: { width: 104, fontFamily: mono, fontSize: 13, fontWeight: 600, color: C.ink, padding: "8px 2px" },
+
+  trendWrap: { display: "flex", alignItems: "flex-end", gap: 6, height: 88, padding: "0 2px 4px", marginBottom: 14, borderBottom: `1px solid ${C.line}` },
+  trendCol: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, background: "transparent", border: "none", padding: 0, height: "100%", justifyContent: "flex-end" },
+  trendBarTrack: { width: "100%", maxWidth: 34, flex: 1, display: "flex", alignItems: "flex-end", justifyContent: "center" },
+  trendBar: { width: "100%", maxWidth: 34, borderRadius: "4px 4px 0 0", transition: "height .3s, background .2s" },
+  trendLabel: { fontSize: 10.5, fontWeight: 600 },
+
+  tabRow: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 },
+  tab: { padding: "6px 12px", fontSize: 12.5, fontWeight: 600, color: C.inkSoft, background: "#EEF0F4", border: "none", borderRadius: 20 },
+  tabOn: { color: "#fff", background: C.ink },
+
+  analysisHead: { display: "flex", alignItems: "center", gap: 10, paddingBottom: 10, borderBottom: `2px solid ${C.line}` },
+  analysisLabel: { flex: 1, fontFamily: mono, fontSize: 15, fontWeight: 600, color: C.ink, padding: "6px 4px", borderRadius: 6 },
+  analysisTotalBox: { display: "flex", flexDirection: "column", alignItems: "flex-end" },
+  analysisTotalLbl: { fontSize: 10, textTransform: "uppercase", letterSpacing: .5, color: C.inkSoft },
+  analysisTotal: { fontFamily: mono, fontSize: 17, fontWeight: 600, color: C.ink, fontVariantNumeric: "tabular-nums" },
+
+  catRow: { padding: "9px 0", borderBottom: `1px solid #F2F4F7` },
+  catTop: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 },
+  catSelect: { flex: 1, fontSize: 13.5, fontWeight: 500, color: C.ink, background: "#F7F8FA", border: `1px solid ${C.line}`, borderRadius: 7, padding: "6px 8px", appearance: "none", WebkitAppearance: "none" },
+  catAmtWrap: { display: "flex", alignItems: "center", gap: 4 },
+  catAmt: { width: 66, textAlign: "right", fontFamily: mono, fontSize: 13.5, fontWeight: 500, color: C.ink, padding: "6px 2px", fontVariantNumeric: "tabular-nums" },
+  catPct: { width: 34, textAlign: "right", fontFamily: mono, fontSize: 12, color: C.inkSoft },
+  iconBtnSm: { display: "grid", placeItems: "center", width: 26, height: 26, borderRadius: 6, background: "transparent", color: "#C2C8D2", border: "none" },
+  barTrack: { height: 7, background: "#F0F2F5", borderRadius: 4, overflow: "hidden" },
+  bar: { height: "100%", borderRadius: 4, transition: "width .3s" },
+
+  importPanel: { background: "#FAFBFC", border: `1px solid ${C.line}`, borderRadius: 12, padding: 14, marginBottom: 16 },
+  importHead: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" },
+  fileBtn: { display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", fontSize: 13.5, fontWeight: 600, color: "#fff", background: C.ink, borderRadius: 9, cursor: "pointer" },
+  importHint: { fontSize: 12, color: C.inkSoft },
+  importOk: { display: "flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 12.5, fontWeight: 600, color: C.pos, background: "#E9F4EE", padding: "7px 10px", borderRadius: 8 },
+
+  mapBox: { marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}` },
+  mapTitle: { fontSize: 12.5, color: C.ink, fontWeight: 600, marginBottom: 10 },
+  mapGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 },
+  mapLbl: { display: "flex", flexDirection: "column", gap: 4, fontSize: 11.5, fontWeight: 600, color: C.inkSoft },
+  mapSel: { fontSize: 13, color: C.ink, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 8, padding: "8px 8px", appearance: "none", WebkitAppearance: "none" },
+
+  previewBox: { marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}` },
+  previewTop: { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8, gap: 8, flexWrap: "wrap" },
+  previewSrc: { fontSize: 13.5, fontWeight: 700, color: C.ink },
+  previewMeta: { fontSize: 11.5, color: C.inkSoft },
+  previewList: { display: "flex", flexDirection: "column", gap: 2 },
+  previewRow: { display: "flex", alignItems: "center", gap: 8, padding: "5px 0" },
+  dotCat: { width: 10, height: 10, borderRadius: 3, flexShrink: 0 },
+  previewCat: { flex: 1, fontSize: 13, color: C.ink },
+  previewVal: { fontFamily: mono, fontSize: 13, fontWeight: 600, color: C.ink, fontVariantNumeric: "tabular-nums" },
+  previewAltro: { fontSize: 11.5, color: C.gold, marginTop: 8, lineHeight: 1.4 },
+  targetRow: { display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" },
+  targetInput: { flex: 1, minWidth: 130, fontFamily: mono, fontSize: 13, color: C.ink, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 8, padding: "8px 10px" },
+  confirmRow: { display: "flex", gap: 8, marginTop: 10 },
+  confirmBtn: { display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", fontSize: 13.5, fontWeight: 600, color: "#fff", background: C.gold, border: "none", borderRadius: 9 },
+  cancelBtn: { padding: "9px 14px", fontSize: 13.5, fontWeight: 600, color: C.inkSoft, background: "#EEF0F4", border: "none", borderRadius: 9 },
+
+  histPanel: { background: C.surface, border: `1px dashed ${C.gold}`, borderRadius: 14, padding: "14px 16px", marginBottom: 18 },
+  histHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  histTitle: { fontSize: 14, fontWeight: 700, color: C.ink },
+  histSub: { fontSize: 11.5, color: C.inkSoft, marginTop: 2, lineHeight: 1.4 },
+  fileBtnGold: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 13px", fontSize: 13, fontWeight: 600, color: "#fff", background: C.gold, borderRadius: 8, cursor: "pointer", flexShrink: 0 },
+};
+
+
+// ---- Barra backup (Esporta / Importa su iCloud Drive) ----
+function BackupBar() {
+  const [msg, setMsg] = useState("");
+  const fileRef = React.useRef(null);
+  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 2600); };
+
+  const doExport = () => {
+    const data = localStorage.getItem(STORAGE_KEY) || "{}";
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const d = new Date().toISOString().slice(0, 10);
+    a.href = url; a.download = "budget-backup-" + d + ".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    flash("Backup creato \u2192 salvalo in iCloud Drive");
+  };
+  const doImport = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        JSON.parse(String(r.result));
+        localStorage.setItem(STORAGE_KEY, String(r.result));
+        flash("Backup importato \u2013 ricarico\u2026");
+        setTimeout(() => location.reload(), 700);
+      } catch (err) { flash("File non valido"); }
+    };
+    r.readAsText(f);
+    e.target.value = "";
+  };
+
+  const S = {
+    bar: { position: "sticky", top: 0, zIndex: 50, display: "flex", alignItems: "center", gap: 8,
+      padding: "10px 16px", background: "rgba(244,245,247,0.92)", backdropFilter: "blur(8px)",
+      borderBottom: "1px solid #E4E7ED", flexWrap: "wrap" },
+    btn: { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 13px", fontSize: 13,
+      fontWeight: 600, color: "#17233B", background: "#fff", border: "1px solid #E4E7ED",
+      borderRadius: 9, cursor: "pointer" },
+    btnGold: { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 13px", fontSize: 13,
+      fontWeight: 600, color: "#fff", background: "#B67B1E", border: "none", borderRadius: 9, cursor: "pointer" },
+    msg: { fontSize: 12, color: "#1F7A54", fontWeight: 600 },
+    spacer: { flex: 1 },
+  };
+  return React.createElement("div", { style: S.bar },
+    React.createElement("button", { style: S.btnGold, onClick: doExport },
+      React.createElement(Upload, { size: 14 }), "Esporta backup"),
+    React.createElement("button", { style: S.btn, onClick: () => fileRef.current && fileRef.current.click() },
+      "Importa backup"),
+    React.createElement("input", { ref: fileRef, type: "file", accept: ".json,application/json",
+      onChange: doImport, style: { display: "none" } }),
+    React.createElement("span", { style: S.spacer }),
+    msg ? React.createElement("span", { style: S.msg }, msg) : null
+  );
+}
+
+function Root() {
+  return React.createElement(React.Fragment, null,
+    React.createElement(BackupBar, null),
+    React.createElement(App, null)
+  );
+}
+
+const _rootEl = document.getElementById("root");
+ReactDOM.createRoot(_rootEl).render(React.createElement(Root));
+
+</script>
+</body>
+</html>
