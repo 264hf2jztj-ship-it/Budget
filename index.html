@@ -84,8 +84,14 @@ const SPESE_DEFAULT = [
   "Tari","Disney +","TIM servizio","Vodafone","Mutuo",
   "Apple Music","Netflix","Amazon Prime","Assicurazione","Macchina",
   "Asilo","Inglese","Luce","Gas","Microsoft","ChatGPT",
-  "Bollo","Acqua","Investimenti","Revolut","iCloud",
+  "Bollo","Acqua","Revolut","iCloud",
 ].map((name) => ({ id: uid(), name, amount: "" }));
+
+// Gli investimenti sono separati dalle spese: riducono il denaro disponibile,
+// ma restano patrimonio e non consumo.
+const INVESTIMENTI_DEFAULT = [
+  { id: uid(), name: "Trade Republic", amount: "100" },
+];
 
 // anni disponibili (nessun importo precompilato: li inserisci tu)
 const ETICHETTE = ["2020","2021","2022","2023","2024","2025","2026"];
@@ -310,6 +316,7 @@ function parseHistoryCSV(rowsArr) {
 
 function App() {
   const [expenses, setExpenses] = useState(SPESE_DEFAULT);
+  const [investments, setInvestments] = useState(INVESTIMENTI_DEFAULT);
   const [years, setYears] = useState(ANNI_DEFAULT);
   const [currentYearId, setCurrentYearId] = useState(CORRENTE_DEFAULT_ID);
   const [ledger, setLedger] = useState(LEDGER_DEFAULT);
@@ -332,7 +339,12 @@ function App() {
           const r = await window.storage.get("budget:data");
           if (r && r.value) {
             const d = JSON.parse(r.value);
-            if (d.expenses) setExpenses(d.expenses);
+            if (d.expenses) {
+              // Migrazione dalla versione precedente: la voce generica
+              // "Investimenti" non deve più essere conteggiata tra le spese.
+              setExpenses(d.expenses.filter((e) => String(e.name || "").trim().toLowerCase() !== "investimenti"));
+            }
+            if (d.investments) setInvestments(d.investments);
             if (d.years) setYears(d.years);
             if (d.currentYearId) setCurrentYearId(d.currentYearId);
             if (d.ledger) setLedger(d.ledger);
@@ -349,21 +361,27 @@ function App() {
     if (!loaded || typeof window === "undefined" || !window.storage) return;
     const t = setTimeout(async () => {
       try {
-        await window.storage.set("budget:data", JSON.stringify({ expenses, years, currentYearId, ledger, analyses }));
+        await window.storage.set("budget:data", JSON.stringify({ expenses, investments, years, currentYearId, ledger, analyses }));
         setSaved(true);
         setTimeout(() => setSaved(false), 1400);
       } catch (e) {}
     }, 450);
     return () => clearTimeout(t);
-  }, [expenses, years, currentYearId, ledger, analyses, loaded]);
+  }, [expenses, investments, years, currentYearId, ledger, analyses, loaded]);
 
   const fixedTotal = useMemo(
     () => expenses.reduce((s, e) => s + (parse(e.amount) || 0), 0),
     [expenses]
   );
 
+  const investmentsTotal = useMemo(
+    () => investments.reduce((s, e) => s + (parse(e.amount) || 0), 0),
+    [investments]
+  );
+
   const currentYear = years.find((y) => y.id === currentYearId) || years[years.length - 1];
-  const currentAvg = currentYear ? mediaAnno(currentYear) : { avg: null, count: 0 };
+  const currentMonthIndex = new Date().getMonth();
+  const currentSalary = currentYear ? parse(currentYear.months[currentMonthIndex]) : null;
 
   // media pluriennale = media delle medie dei singoli anni, esclusi l'anno corrente e gli anni vuoti
   const pluri = useMemo(() => {
@@ -375,8 +393,9 @@ function App() {
     return { avg: medie.reduce((a, b) => a + b, 0) / medie.length, count: medie.length };
   }, [years, currentYearId]);
 
-  const spesaCorrente = currentAvg.avg != null ? currentAvg.avg - fixedTotal : null;
-  const spesaPluri = pluri.avg != null ? pluri.avg - fixedTotal : null;
+  const monthlyCommitments = fixedTotal + investmentsTotal;
+  const spesaCorrente = currentSalary != null ? currentSalary - monthlyCommitments : null;
+  const spesaPluri = pluri.avg != null ? pluri.avg - monthlyCommitments : null;
   const delta = spesaCorrente != null && spesaPluri != null ? spesaCorrente - spesaPluri : null;
 
   // ---- Rendiconto conti ----
@@ -408,6 +427,11 @@ function App() {
     setExpenses((xs) => xs.map((e) => (e.id === id ? { ...e, [field]: val } : e)));
   const addExp = () => setExpenses((xs) => [...xs, { id: uid(), name: "", amount: "" }]);
   const delExp = (id) => setExpenses((xs) => xs.filter((e) => e.id !== id));
+
+  const setInvestment = (id, field, val) =>
+    setInvestments((xs) => xs.map((e) => (e.id === id ? { ...e, [field]: val } : e)));
+  const addInvestment = () => setInvestments((xs) => [...xs, { id: uid(), name: "", amount: "" }]);
+  const delInvestment = (id) => setInvestments((xs) => xs.filter((e) => e.id !== id));
 
   const setCell = (yid, mi, val) =>
     setYears((ys) => ys.map((y) => (y.id === yid ? { ...y, months: y.months.map((m, i) => (i === mi ? val : m)) } : y)));
@@ -555,7 +579,7 @@ function App() {
     // spese fisse: aggiorna per nome, aggiunge se nuova, non tocca importo se il CSV lo lascia vuoto
     setExpenses((xs) => {
       const list = [...xs];
-      for (const h of hist.expenses) {
+      for (const h of hist.expenses.filter((e) => e.name.trim().toLowerCase() !== "investimenti")) {
         const nameKey = h.name.trim().toLowerCase();
         const existing = list.find((x) => x.name.trim().toLowerCase() === nameKey);
         if (existing) {
@@ -651,18 +675,29 @@ function App() {
         {/* HERO */}
         <section style={S.hero}>
           <div style={S.heroLabel}>
-            Ti resta ogni mese <span style={S.heroYear}>· anno {currentYear ? currentYear.label : "—"}</span>
+            Ti resta questo mese <span style={S.heroYear}>· {MESI[currentMonthIndex]} {currentYear ? currentYear.label : "—"}</span>
           </div>
           <div style={{ ...S.heroNum, color: spesaCorrente >= 0 ? C.gold : C.neg }}>
             {spesaCorrente != null ? fmt0.format(spesaCorrente) : "—"}
           </div>
           <div style={S.heroSub}>
-            <span>Media stipendio {currentAvg.avg != null ? fmt0.format(currentAvg.avg) : "—"}</span>
+            <label style={S.heroSalaryLabel}>
+              Stipendio del mese
+              <span style={S.heroSalaryWrap}>
+                <input
+                  style={S.heroSalaryInput}
+                  inputMode="decimal"
+                  value={currentYear ? currentYear.months[currentMonthIndex] : ""}
+                  placeholder="0"
+                  onChange={(ev) => currentYear && setCell(currentYear.id, currentMonthIndex, ev.target.value)}
+                />
+                <span>€</span>
+              </span>
+            </label>
             <span style={S.heroMinus}>−</span>
             <span>Spese fisse {fmt0.format(fixedTotal)}</span>
-            {currentAvg.count > 0 && (
-              <span style={S.heroMesi}>· su {currentAvg.count} mes{currentAvg.count === 1 ? "e" : "i"}</span>
-            )}
+            <span style={S.heroMinus}>−</span>
+            <span>Investimenti {fmt0.format(investmentsTotal)}</span>
           </div>
         </section>
 
@@ -680,14 +715,14 @@ function App() {
             <div style={{ ...S.compareBig, color: spesaPluri != null && spesaPluri < 0 ? C.neg : C.ink }}>
               {spesaPluri != null ? fmt0.format(spesaPluri) : "—"}
             </div>
-            <div style={S.compareSmall}>media storica − spese fisse</div>
+            <div style={S.compareSmall}>media storica − spese fisse − investimenti</div>
           </div>
           <div style={S.compareCard}>
-            <div style={S.compareTop}>Anno corrente vs storico</div>
+            <div style={S.compareTop}>Mese corrente vs storico</div>
             <div style={{ ...S.compareBig, color: delta == null ? C.ink : delta >= 0 ? C.pos : C.neg }}>
               {delta != null ? (delta >= 0 ? "+" : "") + fmt0.format(delta) : "—"}
             </div>
-            <div style={S.compareSmall}>{delta == null ? "—" : delta >= 0 ? "quest'anno spendi di più" : "quest'anno più stretto"}</div>
+            <div style={S.compareSmall}>{delta == null ? "—" : delta >= 0 ? "questo mese hai più margine" : "questo mese hai meno margine"}</div>
           </div>
         </section>
 
@@ -725,6 +760,43 @@ function App() {
           </div>
 
           <button style={S.addBtn} onClick={addExp}><Plus size={15} /> Aggiungi spesa</button>
+        </section>
+
+        {/* INVESTIMENTI PROGRAMMATI */}
+        <section style={S.block}>
+          <div style={S.blockHead}>
+            <div style={S.blockTitle}><TrendingUp size={16} color={C.gold} /> Investimenti mensili</div>
+            <div style={S.blockTotal}>{fmt2.format(investmentsTotal)}<span style={S.perMonth}> /mese</span></div>
+          </div>
+          <p style={S.hint}>Sono accantonamenti che riducono il budget disponibile, ma aumentano il tuo patrimonio.</p>
+
+          <div style={S.expList}>
+            {investments.map((e) => (
+              <div key={e.id} style={S.expRow}>
+                <input
+                  style={S.expName}
+                  value={e.name}
+                  placeholder="Broker o investimento"
+                  onChange={(ev) => setInvestment(e.id, "name", ev.target.value)}
+                />
+                <div style={S.expAmtWrap}>
+                  <input
+                    style={S.expAmt}
+                    inputMode="decimal"
+                    value={e.amount}
+                    placeholder="0"
+                    onChange={(ev) => setInvestment(e.id, "amount", ev.target.value)}
+                  />
+                  <span style={S.eur}>€</span>
+                </div>
+                <button style={S.iconBtn} onClick={() => delInvestment(e.id)} aria-label="Elimina investimento">
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <button style={S.addBtn} onClick={addInvestment}><Plus size={15} /> Aggiungi investimento</button>
         </section>
 
         {/* STIPENDI */}
@@ -1115,8 +1187,10 @@ const styles = {
   heroYear: { color: C.gold, fontWeight: 600 },
   heroNum: { className: "hn", fontFamily: mono, fontSize: 58, fontWeight: 600, lineHeight: 1, margin: "10px 0 14px", letterSpacing: -1, fontVariantNumeric: "tabular-nums" },
   heroSub: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 13, color: "#C6CFDE", fontFamily: mono },
+  heroSalaryLabel: { display: "inline-flex", alignItems: "center", gap: 7 },
+  heroSalaryWrap: { display: "inline-flex", alignItems: "center", gap: 3, background: "rgba(255,255,255,.09)", border: "1px solid rgba(255,255,255,.16)", borderRadius: 7, padding: "2px 7px" },
+  heroSalaryInput: { width: 82, textAlign: "right", color: "#fff", fontFamily: mono, fontSize: 13, fontWeight: 600, padding: "4px 2px", fontVariantNumeric: "tabular-nums" },
   heroMinus: { color: C.gold, fontWeight: 700 },
-  heroMesi: { color: "#8593AB" },
 
   compareRow: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, margin: "10px 0 22px" },
   compareCard: { background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: "13px 14px" },
