@@ -114,12 +114,13 @@ function shipGuideMatch(u,kind){
 }
 function shipGuideSort(a,b,kind){
  var rank={
- piscine:["piscine-msc-world-europa-fine-ottobre","world-europa-piscine-e-limiti-2026"],
- spettacoli:["world-europa-teatro-spettacoli-2026","world-europa-serate-proposta-settimana","msc-world-europa-panorama-serate-tema","world-europa-spettacoli-funpass","giornata-navigazione-29-ottobre"],
- bambini:["family-doremiland-mini-3-6","rosa-mini-club-sessioni-brevi","rosa-lego-duplo-famiglia","rosa-attivita-con-genitori-restrizioni","rosa-pasti-e-mini-club-funtime-dinner","rosa-halloween-attivita-e-cautela","msc-halloween-2026-programma-family","halloween-2026-world-europa-bambini","mini-club-rosa-ponte19"]
+ piscine:[/piscine-msc-world-europa/,/world-europa-piscine/],
+ spettacoli:[/world-europa-teatro/,/world-europa-serate/,/world-europa-panorama/,/world-europa-spettacoli/,/giornata-navigazione/],
+ bambini:[/family-doremiland/,/mini-club-sessioni-brevi/,/lego-duplo-famiglia/,/attivita-con-genitori-restrizioni/,/pasti-e-mini-club/,/halloween-attivita-e-cautela/,/msc-halloween/,/^halloween-2026/,/^mini-club-/]
  };
- var order=rank[kind]||[], ai=order.indexOf(a.slug),bi=order.indexOf(b.slug);
- return (ai<0?100:ai)-(bi<0?100:bi);
+ var priority=rank[kind]||[];
+ function index(item){var i=priority.findIndex(function(pattern){return pattern.test(String(item.slug||""))});return i<0?100:i}
+ return index(a)-index(b);
 }
 function shipGuideCard(u,expanded){
  return '<details class="card shipdetail"'+(expanded?' open':'')+'><summary>'+esc(u.title)+'</summary><div class="chatbody">'+esc(u.body)+'</div></details>';
