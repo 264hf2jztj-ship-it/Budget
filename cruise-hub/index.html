@@ -48,6 +48,7 @@ ports:["Verificare orario di rientro a bordo","Portare documenti e tessere neces
 function initState(){return {privateTrip:null,checked:["pre:0","pre:1","pre:2","pre:3","pre:4","pre:5"],liked:[],visited:[],notes:[],customTasks:[],customItems:[],selectedDate:"2026-10-25"}}
 var st=initState(),actor=null,db=null,revision=null,pending=false,conflict=false,busy=false,savingTimer=null,version=0,page="oggi",filter="all",term="";
 var chatUpdates=[],chatLoading=false,chatFeedError=null,chatSig="",chatFilter="all";
+var checklistItems=[],checklistLoading=false,checklistError=null,checklistSig="";
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]})}
 function key(){return "cruise.hub.cloud.v1:"+actor.id}
 function status(txt){ref("status").textContent="● "+txt}
@@ -82,11 +83,14 @@ function openApp(){ref("gate").classList.add("hidden");ref("app").classList.remo
 async function initUser(u){
  if(actor&&actor.id===u.id)return;
  actor=u;revision=null;pending=false;conflict=false;st=initState();chatUpdates=[];chatSig="";chatFeedError=null;
+ checklistItems=[];checklistSig="";checklistError=null;
+ try{var savedChecklist=JSON.parse(localStorage.getItem(checklistCacheKey())||"[]");
+ if(Array.isArray(savedChecklist)){checklistItems=savedChecklist;checklistSig=JSON.stringify(savedChecklist)}}catch(e){}
  try{var cached=JSON.parse(localStorage.getItem(chatCacheKey())||"[]");if(Array.isArray(cached)){chatUpdates=cached;chatSig=JSON.stringify(cached.map(function(x){return [x.id,x.updated_at,x.title,x.body]}))}}catch(e){}
  try{var local=localStorage.getItem(key());if(local){var x=JSON.parse(local);if(valid(x))st=Object.assign(initState(),x)}pending=localStorage.getItem(key()+":pending")==="1"}catch(e){}
- openApp();await load(true);await loadChatUpdates()
+ openApp();await load(true);await Promise.all([loadChatUpdates(),loadChecklistItems()])
 }
-function stop(){actor=null;revision=null;st=initState();chatUpdates=[];chatSig="";chatFeedError=null;ref("app").classList.add("hidden");ref("gate").classList.remove("hidden")}
+function stop(){actor=null;revision=null;st=initState();chatUpdates=[];chatSig="";chatFeedError=null;checklistItems=[];checklistSig="";checklistError=null;ref("app").classList.add("hidden");ref("gate").classList.remove("hidden")}
 function today(){var d=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Rome",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());return ports.find(function(p){return p[0]===d})||ports[0]}
 
 function chatCacheKey(){return "cruise.hub.chat.v1:"+actor.id}
@@ -115,6 +119,40 @@ async function loadChatUpdates(){
  finally{chatLoading=false}
 }
 
+
+function checklistCacheKey(){return "cruise.hub.checklist.v1:"+actor.id}
+function checklistItemId(item){return item.completion_key||"cloud:"+item.slug}
+function checklistRows(group){
+ var rows=(groups[group]||[]).map(function(s,i){return {text:s,id:group+":"+i}});
+ var custom=st.customTasks||[];
+ custom.filter(function(x){return x&&x.group===group}).forEach(function(x,i){
+  rows.push({text:x.text,id:group+":"+((groups[group]||[]).length+i)});
+ });
+ checklistItems.filter(function(x){return x.section===group}).forEach(function(x){
+  rows.push({text:x.title,id:checklistItemId(x)});
+ });
+ return rows;
+}
+async function loadChecklistItems(){
+ if(!actor||!db||checklistLoading||!navigator.onLine)return;
+ checklistLoading=true;var uid=actor.id;
+ try{
+  var r=await db.from("cruise_hub_checklist_items")
+   .select("slug,section,title,completion_key,sort_order,updated_at")
+   .eq("user_id",uid).eq("is_active",true)
+   .order("sort_order",{ascending:true}).order("slug",{ascending:true}).limit(100);
+  if(r.error)throw r.error;
+  if(!actor||actor.id!==uid)return;
+  var next=r.data||[];
+  var sig=JSON.stringify(next);
+  if(sig!==checklistSig||checklistError){
+   checklistItems=next;checklistSig=sig;checklistError=null;
+   try{localStorage.setItem(checklistCacheKey(),JSON.stringify(next))}catch(e){}
+   if(page==="checklist"||page==="oggi")render();
+  }
+ }catch(e){if(actor&&actor.id===uid){checklistError=String(e&&e.message||e);if(page==="checklist")render()}}
+ finally{checklistLoading=false}
+}
 function tab(t){page=t;render()}
 function render(){
  if(!actor)return;
@@ -146,12 +184,21 @@ function render(){
  shown.forEach(function(v){out+='<div class="venue"><div class="row"><div><strong>'+esc(v[0])+'</strong><div class="small">Ponte '+esc(v[1])+' · '+(v[2]==="bar"?"Bar":"Ristorante")+'</div></div><div class="row"><span class="badge '+(v[3]==="extra"?"extra":"")+'">'+esc(v[3])+'</span><button class="fav" data-like="'+esc(v[0])+'" aria-label="Preferito">'+(st.liked.includes(v[0])?"★":"☆")+'</button></div></div><p class="small">'+esc(v[4])+'</p></div>'});
  out+='</div><p class="small">La disponibilità di locali e prodotti, i turni e i prezzi si verificano a bordo.</p>';
  }else if(page==="checklist"){
- out='<h2>Checklist</h2>';
- Object.keys(groups).forEach(function(g){var title={pre:"Prima della partenza",board:"Appena a bordo",ports:"Prima delle escursioni"}[g],tasks=groups[g].concat(st.customTasks.filter(function(x){return x&&x.group===g}).map(function(x){return x.text}));
- var n=tasks.filter(function(x,i){return st.checked.includes(g+":"+i)}).length;
+ out='<h2>Checklist</h2><p class="small">Spunta le attività quando le completi: il progresso si sincronizza con il tuo profilo. I nuovi promemoria possono essere aggiunti direttamente dalla chat.</p><button class="btn tiny secondary" id="refreshChecklist">Aggiorna attività</button>';
+ if(checklistError)out+='<p class="small">Non riesco a cercare nuovi promemoria: '+esc(checklistError)+'. Mostro quelli già disponibili.</p>';
+ ["pre","board","food","ports"].forEach(function(g){
+ var title={pre:"Prima della partenza",board:"Primo giorno · 25 ottobre",food:"Ristorazione · controlli del primo giorno",ports:"Prima delle escursioni"}[g];
+ var tasks=checklistRows(g);
+ if(g==="food"&&!tasks.length)return;
+ var n=tasks.filter(function(x){return st.checked.includes(x.id)}).length;
  out+='<div class="card"><div class="row"><h3>'+title+'</h3><span class="small">'+n+'/'+tasks.length+'</span></div>';
- tasks.forEach(function(x,i){var id=g+":"+i,done=st.checked.includes(id);out+='<div class="task '+(done?"done":"")+'"><input type="checkbox" data-task="'+id+'" '+(done?"checked":"")+' aria-label="'+esc(x)+'"><label>'+esc(x)+'</label></div>'});
- out+='</div>'});
+ tasks.forEach(function(x){
+ var id=x.id,done=st.checked.includes(id);
+ out+='<div class="task '+(done?"done":"")+'"><input type="checkbox" data-task="'+esc(id)+'" '+(done?"checked":"")+' aria-label="'+esc(x.text)+'"><label>'+esc(x.text)+'</label></div>';
+ });
+ if(g==="food")out+='<p class="small">Il controllo del turno cena è collegato anche alla lista del primo giorno: una sola spunta vale per entrambe.</p>';
+ out+='</div>';
+ });
  }else if(page==="note"){
  out='<h2>Note personali</h2><div class="card"><label for="noteTitle">Titolo</label><input id="noteTitle" type="text" placeholder="Es. Vino, escursione, orario"><label for="noteText">Nota</label><textarea id="noteText" placeholder="Scrivi qui..."></textarea><button class="btn" id="addNote">Salva nota</button></div>';
  st.notes.slice().reverse().forEach(function(n){out+='<div class="card"><div class="row"><strong>'+esc(n.title||"Nota")+'</strong><button class="btn tiny ghost" data-delete="'+esc(n.id)+'">Elimina</button></div><p style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(n.body)+'</p><p class="small">'+esc(n.updated||"")+'</p></div>'})
@@ -173,6 +220,7 @@ function render(){
  if(ref("refreshChat"))ref("refreshChat").onclick=function(){loadChatUpdates()};
  var search=ref("searchVenues");if(search){search.oninput=function(){term=search.value;var pos=search.selectionStart;render();ref("searchVenues").focus();ref("searchVenues").setSelectionRange(pos,pos)}} 
  ref("page").querySelectorAll("[data-like]").forEach(function(b){b.onclick=function(){var s=b.dataset.like;st.liked=st.liked.includes(s)?st.liked.filter(function(x){return x!==s}):st.liked.concat([s]);save()}});
+ if(ref("refreshChecklist"))ref("refreshChecklist").onclick=function(){loadChecklistItems()};
  ref("page").querySelectorAll("[data-task]").forEach(function(b){b.onchange=function(){var s=b.dataset.task;st.checked=b.checked?Array.from(new Set(st.checked.concat(s))):st.checked.filter(function(x){return x!==s});save()}});
  ref("page").querySelectorAll("[data-noteport]").forEach(function(b){b.onclick=function(){page="note";render();ref("noteTitle").value="Escursione "+(ports.find(function(p){return p[0]===b.dataset.noteport})||[])[2]}});
  ref("page").querySelectorAll("[data-delete]").forEach(function(b){b.onclick=function(){if(!confirm("Eliminare questa nota?"))return;st.notes=st.notes.filter(function(n){return n.id!==b.dataset.delete});save()}});
@@ -221,9 +269,9 @@ async function start(){
  db=window.supabase.createClient(CONFIG.url,CONFIG.key,{auth:{flowType:"pkce",detectSessionInUrl:true,autoRefreshToken:true,persistSession:true}});
  db.auth.onAuthStateChange(function(event,session){if(event==="SIGNED_OUT"){stop();return}if(session&&session.user&&(event==="SIGNED_IN"||event==="INITIAL_SESSION"))setTimeout(function(){initUser(session.user)},0)});
  var r=await db.auth.getSession();if(r.data&&r.data.session&&r.data.session.user)await initUser(r.data.session.user);
- document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible"&&actor){if(pending)flush();else load();loadChatUpdates()}});
- window.addEventListener("online",function(){if(actor){if(pending)flush();loadChatUpdates()}});
- setInterval(function(){if(actor&&document.visibilityState==="visible"){if(pending)flush();else load();loadChatUpdates()}},60000);
+ document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible"&&actor){if(pending)flush();else load();loadChatUpdates();loadChecklistItems()}});
+ window.addEventListener("online",function(){if(actor){if(pending)flush();loadChatUpdates();loadChecklistItems()}});
+ setInterval(function(){if(actor&&document.visibilityState==="visible"){if(pending)flush();else load();loadChatUpdates();loadChecklistItems()}},60000);
 }
 start();
 })();</script></body></html>
