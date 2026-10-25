@@ -192,7 +192,7 @@ function render(){
  if(page==="tappe"){
   out='<h2>Itinerario</h2><p class="small">Seleziona uno scalo per vedere il suo programma completo, separato dagli altri giorni.</p>';
   (DATA.ports||[]).forEach(function(p){
-   var u=primary(p[0]),count=(DATA.updates||[]).filter(function(x){return x.port_date===p[0]&&!isTimeline(x)}).length;
+   var u=primary(p[0]),count=(DATA.updates||[]).filter(function(x){return x.port_date===p[0]&&!isTimeline(x)&&!/^onboard-dir-/.test(x.slug||"")}).length;
    out+='<button class="linkcard" data-open="'+esc(p[0])+'"><div class="row"><strong>'+esc(p[1])+' · '+esc(p[2])+'</strong><span class="small">'+esc(p[3])+' → '+esc(p[4])+'</span></div><p>'+esc(p[5])+'</p><div class="row"><span class="small">'+(u?"Itinerario dettagliato disponibile":count+" note del giorno")+'</span><span class="pill">Apri dettagli ›</span></div></button>';
   });
   var daysKids=offlineDirectory().kidsSchedules;
@@ -210,7 +210,9 @@ function render(){
   if(timeline)out+=timelineHtml(chosen,timeline);
   else out+='<div class="card">Timeline non inclusa in questa copia. Consulta gli appunti originali qui sotto.</div>';
   if(u)out+='<details class="card guide"><summary>Appunti originali e fonti</summary><div class="content">'+esc(u.body)+'</div></details>';
-  var others=(DATA.updates||[]).filter(function(x){return x.port_date===chosen&&x!==u&&!isTimeline(x)});
+  var activeKids=offlineDirectory().kidsSchedules.find(function(x){return x.date===chosen});
+  if(activeKids)out+='<div class="card"><strong>🧒 Programma Kids Club · '+esc(activeKids.city)+'</strong><p class="small">Open House: '+esc(activeKids.openHouse.join(' e '))+'. Controlla le attività e l’idoneità 3–6 anni.</p><button class="btn" data-kids-tappe="'+esc(chosen)+'">Programma del giorno ›</button></div>';
+  var others=(DATA.updates||[]).filter(function(x){return x.port_date===chosen&&x!==u&&!isTimeline(x)&&!/^onboard-dir-/.test(x.slug||"")});
   if(others.length){out+='<details class="card guide"><summary>Altri consigli del giorno ('+others.length+')</summary><div class="content">'+others.map(function(x){return '<details class="card guide"><summary>'+esc(x.title)+'</summary><div class="content">'+esc(x.body)+'</div></details>'}).join('')+'</div></details>'}
  }else if(page==="nave"){
   var guide=offlineDirectory();
