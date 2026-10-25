@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1,viewport-fit=cover">
+<title>Cruise Hub · Guida offline</title>
+<style>
+:root{--navy:#0a344b;--sea:#0c7190;--muted:#667b8b;--line:#d9e5eb;--bg:#f3f7f9}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:#173247;font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{background:linear-gradient(135deg,#07334b,#138297);color:#fff;padding:20px 16px}
+main{max-width:760px;margin:auto;padding:14px 16px 95px}
+h1{font-size:24px;margin:7px 0}h2{font-size:21px;margin:12px 0}h3{font-size:16px}
+p{line-height:1.55}.small{font-size:12px;color:var(--muted);line-height:1.5}
+header .small{color:#e6f1f5}
+nav{display:flex;position:fixed;bottom:0;left:0;right:0;padding-bottom:env(safe-area-inset-bottom);background:#fff;box-shadow:0 -4px 20px #082d4818;z-index:5}
+nav button{flex:1;border:0;background:white;padding:13px 5px;color:#36596b;font-size:12px;font-weight:700}
+nav button.on{border-top:3px solid #1195a9;color:#065375}
+.card{background:#fff;border-radius:14px;border:1px solid var(--line);padding:15px;margin:12px 0}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.btn{border:1px solid #c3d8e2;background:#eaf4f7;color:#095676;padding:10px 14px;border-radius:10px;font-weight:650;cursor:pointer}
+.linkcard{width:100%;text-align:left;display:block;background:#fff;border:1px solid var(--line);border-radius:14px;padding:15px;margin:10px 0;cursor:pointer;color:inherit}
+.linkcard strong{font-size:17px}.pill{border-radius:25px;background:#e6f5f0;color:#276846;padding:3px 9px;font-size:11px;font-weight:700}
+.guide{padding:0;overflow:hidden}.guide summary{cursor:pointer;padding:15px;font-weight:700}.guide .content{padding:0 15px 16px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
+details[open] summary{border-bottom:1px solid var(--line);margin-bottom:12px}
+.actions{display:flex;gap:7px;flex-wrap:wrap}.actions button{border:1px solid var(--line);padding:9px 11px;border-radius:24px;background:white;color:#234f66;cursor:pointer}.actions button.on{background:#0b6789;color:white}
+.task{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.task input{width:19px;height:19px}
+input[type=search]{width:100%;font:inherit;padding:12px;border:1px solid #c8dbe4;border-radius:11px}
+.notice{border-left:3px solid #b48319;background:#fcf6e5;padding:12px 15px;margin:12px 0;border-radius:7px;line-height:1.5}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header><div style="font-size:12px;font-weight:750;letter-spacing:2px">🚢 CRUISE HUB · OFFLINE</div><h1>MSC World Europa</h1><div>25 ottobre – 1 novembre 2026</div><p class="small" id="exported"></p></header>
+<main id="main" aria-live="polite"></main>
+<nav aria-label="Guida offline">
+<button data-page="tappe" class="on">🗺️<div>Tappe</div></button>
+<button data-page="nave">🚢<div>A bordo</div></button>
+<button data-page="checklist">✅<div>Checklist</div></button>
+<button data-page="note">📝<div>Note</div></button>
+</nav>
+<script>
+(function(){
+"use strict";
+var DATA=/*__CRUISE_SNAPSHOT__*/null;
+var page="tappe",chosen="",ship="piscine",checked=(DATA&&DATA.checked||[]).slice();
+var search="";
+var root=document.getElementById("main");
+function esc(v){return String(v==null?"":v).replace(/[&<>"']/g,function(x){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&quot;"}[x]})}
+function dayLabel(date){var p=(DATA.ports||[]).find(function(x){return x[0]===date});return p?(p[1]+" · "+p[2]):date}
+function primary(date){return (DATA.updates||[]).find(function(u){return u.port_date===date&&u.category==="escursione"&&/^escursione-proposta-/.test(u.slug||"")})}
+function noteDetails(u){
+ var body=String(u.body||"").trim(),parts=body.split(/\n\s*\n/g).filter(Boolean);
+ if(parts.length===1&&body.length>1000){parts=body.split(/\n(?=[A-ZÀ-Ù][A-ZÀ-Ù 0-9()\/-]{4,65}:)/).filter(Boolean)}
+ if(parts.length<2)return '<div class="card"><h3>'+esc(u.title)+'</h3><p style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(body)+'</p></div>';
+ return '<div class="card"><strong>'+esc(u.title)+'</strong><p class="small">Tocca una sezione per aprirla.</p></div>'+parts.map(function(t,i){
+ var head=t.split(/\n/)[0].trim(),m=head.match(/^([^:.]{4,75})(?:[:.]|\s[—–]\s)/);
+ var label=m?m[1]:(i===0?"Panoramica":"Dettagli "+i);
+ return '<details class="card guide"'+(i===0?' open':'')+'><summary>'+esc(label)+'</summary><div class="content">'+esc(t)+'</div></details>'
+ }).join("");
+}
+function shipKind(u,k){
+ var slug=String(u.slug||"");
+ if(k==="piscine")return u.category==="attivita"&&/piscine|aquapark/.test(slug);
+ if(k==="sport")return u.category==="attivita"&&/^msc-world-europa-sport-/.test(slug);
+ if(k==="spettacoli")return u.category==="attivita"&&/teatro|spettacoli|serate|panorama|giornata-navigazione/.test(slug);
+ if(k==="bambini")return /doremiland|mini-club|lego|genitori-restrizioni|halloween/.test(slug);
+ if(k==="ristorazione")return u.category==="ristorazione";
+ return false;
+}
+function render(){
+ if(!DATA){root.innerHTML='<div class="card"><h2>Guida non personalizzata</h2><p>Questa è la struttura del file offline. Apri Cruise Hub con Internet, accedi e scegli “Scarica guida offline” per ottenere la copia completa dei tuoi itinerari e consigli.</p></div>';return}
+ document.getElementById("exported").textContent="Copia esportata: "+(DATA.exported_at||"")+". Nessuna connessione Internet richiesta.";
+ document.querySelectorAll("nav button").forEach(function(b){b.classList.toggle("on",b.dataset.page===page||page==="detail"&&b.dataset.page==="tappe")});
+ var out="";
+ if(page==="tappe"){
+  out='<h2>Itinerario</h2><p class="small">Seleziona uno scalo per vedere il suo programma completo, separato dagli altri giorni.</p>';
+  (DATA.ports||[]).forEach(function(p){
+   var u=primary(p[0]),count=(DATA.updates||[]).filter(function(x){return x.port_date===p[0]}).length;
+   out+='<button class="linkcard" data-open="'+esc(p[0])+'"><div class="row"><strong>'+esc(p[1])+' · '+esc(p[2])+'</strong><span class="small">'+esc(p[3])+' → '+esc(p[4])+'</span></div><p>'+esc(p[5])+'</p><div class="row"><span class="small">'+(u?"Itinerario dettagliato disponibile":count+" note del giorno")+'</span><span class="pill">Apri dettagli ›</span></div></button>';
+  });
+ }else if(page==="detail"){
+  var p=(DATA.ports||[]).find(function(x){return x[0]===chosen});
+  if(!p){page="tappe";render();return}
+  var u=primary(chosen);
+  out='<button class="btn" data-back="1">← Tutte le tappe</button><h2>'+esc(p[1])+' · '+esc(p[2])+'</h2><div class="card"><div class="row"><strong>Scalo</strong><span>'+esc(p[3])+' → '+esc(p[4])+'</span></div><p>'+esc(p[5])+'</p><p class="small">Per l’ultimo imbarco prevale sempre la comunicazione MSC.</p></div>';
+  if(u)out+='<h3>Escursione</h3>'+noteDetails(u);
+  var others=(DATA.updates||[]).filter(function(x){return x.port_date===chosen&&x!==u});
+  if(others.length){out+='<h3>Altre attività e consigli del giorno</h3>';others.forEach(function(x){out+='<details class="card guide"><summary>'+esc(x.title)+'</summary><div class="content">'+esc(x.body)+'</div></details>'})}
+ }else if(page==="nave"){
+  out='<h2>Attività a bordo</h2><div class="actions">'+[["piscine","Piscine"],["sport","Sport"],["spettacoli","Spettacoli"],["bambini","Bambini"],["ristorazione","Ristorazione"]].map(function(p){return '<button data-ship="'+p[0]+'" class="'+(ship===p[0]?"on":"")+'">'+p[1]+'</button>'}).join("")+'</div>';
+  var set=(DATA.updates||[]).filter(function(u){return shipKind(u,ship)}),q=search.trim().toLowerCase();
+  out+='<p class="small">'+set.length+' schede disponibili: espandile solo quando ti servono.</p><input id="q" type="search" placeholder="Cerca nei consigli..." value="'+esc(search)+'">';
+  set.filter(function(u){return !q||(u.title+" "+u.body).toLowerCase().includes(q)}).forEach(function(u){out+='<details class="card guide"><summary>'+esc(u.title)+'</summary><div class="content">'+esc(u.body)+'</div></details>'});
+  if(ship==="ristorazione"){out+='<h3>Ristoranti e bar</h3>';(DATA.venues||[]).forEach(function(v){out+='<div class="card"><strong>'+esc(v[0])+'</strong><div class="small">Ponte '+esc(v[1])+' · '+esc(v[3])+'</div><p>'+esc(v[4])+'</p></div>'})}
+ }else if(page==="checklist"){
+  out='<h2>Checklist</h2><div class="notice">Le spunte in questo file non si sincronizzano con il Cruise Hub online. Il file contiene lo stato al momento dell’esportazione.</div>';
+  ["pre","board","food","ports"].forEach(function(k){
+   var names={pre:"Prima della partenza",board:"Appena a bordo",food:"Ristorazione",ports:"Prima delle escursioni"},rows=(DATA.checklist||{})[k]||[];
+   if(!rows.length)return;
+   out+='<div class="card"><h3>'+names[k]+'</h3>'+rows.map(function(x){return '<label class="task"><input type="checkbox" data-check="'+esc(x.id)+'" '+(checked.includes(x.id)?"checked":"")+'><span>'+esc(x.text)+'</span></label>'}).join("")+'</div>';
+  })
+ }else if(page==="note"){
+  out='<h2>Note personali</h2><div class="notice">Le note sono una fotografia al momento del download. Evita di condividere il file, perché può contenere dettagli privati.</div>';
+  var rows=DATA.personal_notes||[];
+  if(!rows.length)out+='<div class="card">Non ci sono note personali salvate.</div>';
+  rows.forEach(function(n){out+='<details class="card guide"><summary>'+esc(n.title||"Nota")+'</summary><div class="content">'+esc(n.body)+'</div></details>'});
+ }
+ root.innerHTML=out;
+ root.querySelectorAll("[data-open]").forEach(function(b){b.onclick=function(){chosen=b.dataset.open;page="detail";render();window.scrollTo(0,0)}});
+ root.querySelectorAll("[data-back]").forEach(function(b){b.onclick=function(){page="tappe";render();window.scrollTo(0,0)}});
+ root.querySelectorAll("[data-ship]").forEach(function(b){b.onclick=function(){ship=b.dataset.ship;search="";render()}});
+ root.querySelectorAll("[data-check]").forEach(function(x){x.onchange=function(){checked=x.checked?checked.concat([x.dataset.check]):checked.filter(function(k){return k!==x.dataset.check})}});
+ var qbox=document.getElementById("q");if(qbox){qbox.onchange=function(){search=qbox.value;render()};qbox.onkeydown=function(e){if(e.key==="Enter"){search=qbox.value;render()}}}
+}
+document.querySelectorAll("nav button").forEach(function(b){b.onclick=function(){page=b.dataset.page;render();window.scrollTo(0,0)}});
+render();
+})();
+</script>
+</body></html>
