@@ -104,7 +104,7 @@ pre:["Documenti per tutti pronti","Carte d’imbarco salvate offline","Etichette
 board:["Seguire briefing sicurezza e verificare punto di riunione","Confermare turno cena e ristorante","Registrare la bambina al Mini Club (ponte 19)","Collegarsi al Wi-Fi della nave e aprire MSC for Me","Controllare spettacoli e attività","Visitare World Promenade e Botanic Garden Pool","Chiedere se MSC conserva il vino aperto tra le cene"],
 ports:["Verificare orario di rientro a bordo","Portare documenti e tessere necessarie","Controllare meteo e accessibilità col passeggino","Verificare telefono e mappe offline"]};
 function initState(){return {privateTrip:null,checked:["pre:0","pre:1","pre:2","pre:3","pre:4","pre:5"],liked:[],visited:[],notes:[],customTasks:[],customItems:[],selectedDate:"2026-10-25"}}
-var st=initState(),actor=null,db=null,revision=null,pending=false,conflict=false,busy=false,savingTimer=null,version=0,page="oggi",filter="all",term="",shipTab="mappa",selectedPort="",shipMapDeck="",portRouteChoice={},onboardPlaceId="",onboardExperienceId="",onboardPlaceOrigin="mappa";
+var st=initState(),actor=null,db=null,revision=null,pending=false,conflict=false,busy=false,savingTimer=null,version=0,page="oggi",filter="all",term="",shipTab="mappa",selectedPort="",shipMapDeck="",portRouteChoice={},onboardPlaceId="",onboardExperienceId="",onboardPlaceOrigin="mappa",kidsSelectedDate="",kidsFilter="mini";
 var chatUpdates=[],chatLoading=false,chatFeedError=null,chatSig="",chatFilter="all";
 var checklistItems=[],checklistLoading=false,checklistError=null,checklistSig="";
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]})}
@@ -185,7 +185,7 @@ var shipMapHighlights=[["5","La Foglia, Luna Park Arena"],["10","Ponte Vienna ·
 var shipMapVenues=[["Cabine · ponte Vienna","10"],["Doremiland / Mini Club","19"],["LEGO / DUPLO","19"],["La Brasserie Buffet","19"],["MSC Gym Technogym","20"],["MSC Sportplex","20"],["Aurora Borealis Aquapark","20"],["Botanic Garden Pool","18"],["La Plage Pool","18"],["Zen Pool adulti","18"],["Il Mercato Buffet","18"],["World Theatre","6 e 7"],["Panorama Lounge","6 e 7"],["Luna Park Arena","5 e 6"],["Reception / Guest Services","6"],["Pizza & Burger","6"],["HOLA! Tacos & Cantina","7"],["Kaito Sushi e Teppanyaki","7"],["Masters of the Sea","7"],["World Promenade","8"],["Sweet Temptations","8"],["MSC Aurea Spa","8"],["Raj Polo Tea House","8"]];
 function isOnboardDirectory(u){return /^onboard-dir-/.test(String(u&&u.slug||""))}
 function onboardDirectory(){
- var out={general:[],venues:[],experiences:[],hours:[],hoursGeneral:[],hoursStatus:""};
+ var out={general:[],venues:[],experiences:[],hours:[],hoursGeneral:[],hoursStatus:"",kidsSchedules:[]};
  chatUpdates.filter(isOnboardDirectory).forEach(function(u){
   try{
    var x=JSON.parse(u.body);if(!x||x.v!==1)return;
@@ -193,6 +193,7 @@ function onboardDirectory(){
    else if(x.type==="venues")out.venues=out.venues.concat((x.items||[]).map(function(v){return {id:v[0],name:v[1],deck:v[2],price:v[3],short:v[4]}}));
    else if(x.type==="experiences")out.experiences=out.experiences.concat(x.items||[]);
    else if(x.type==="hours"){out.hours=out.hours.concat(x.items||[]);out.hoursGeneral=out.hoursGeneral.concat(x.general||[]);out.hoursStatus=x.status||"Orari indicativi"}
+   else if(x.type==="kidsSchedule")out.kidsSchedules.push(x);
   }catch(err){}
  });
  return out;
@@ -215,6 +216,31 @@ function restaurantHoursCard(row){
  if(confirmedCount)out+='<p class="small">Gli orari rilevati in un giorno possono cambiare nei giorni successivi. Controlla sempre il cartello all’ingresso.</p>';
  if(row.src&&/^https:\/\//.test(row.src))out+='<a class="small" href="'+esc(row.src)+'" target="_blank" rel="noopener noreferrer">Fonte degli orari orientativi ↗</a>';
  out+='</div>';
+ return out;
+}
+function kidsScheduleFor(date){return onboardDirectory().kidsSchedules.find(function(x){return x.date===date})||null}
+function kidsActivityHtml(date){
+ var data=onboardDirectory().kidsSchedules.slice().sort(function(a,b){return a.date.localeCompare(b.date)});
+ if(!data.length)return '<div class="card"><p>Il programma dei Kids Clubs non è ancora caricato. Premi Aggiorna informazioni per riprovare.</p></div>';
+ var chosen=data.find(function(x){return x.date===(kidsSelectedDate||date)})||data[0];
+ var out='<div class="card"><strong>📸 Programma fotografato a bordo · 25 ottobre</strong><p class="small">Il cartello contiene le attività dei Kids Clubs da 0 a 17 anni. Mini Club = 3–6 anni. Le attività suggerite per i piccoli devono comunque essere confermate dagli animatori.</p></div>';
+ out+='<div class="filter" aria-label="Giorno programma bambini">';
+ data.forEach(function(x){out+='<button type="button" data-kids-day="'+esc(x.date)+'" class="'+(chosen.date===x.date?'selected':'')+'">'+esc(x.city)+' · '+esc(x.date.slice(8))+'/10</button>'});
+ out+='</div>';
+ out+='<div class="card"><div class="row"><strong>🧒 '+esc(chosen.city)+' · '+esc(chosen.date.slice(8))+' ottobre</strong><span class="badge">'+esc(chosen.theme)+'</span></div>';
+ out+='<h3>Open House · con i genitori</h3><p style="font-size:19px;font-weight:700">'+esc(chosen.openHouse.join('  ·  '))+'</p>';
+ out+='<p class="small">Doremiland, ponte 19. In queste fasce le famiglie possono giocare insieme. NON sono orari garantiti di custodia al Mini Club.</p>';
+ out+='<p class="small">La fascia generale Kids Clubs stampata è '+esc(chosen.kidsClubHours)+', ma non significa che tutti i gruppi siano aperti senza interruzioni.</p>';
+ out+='</div>';
+ out+='<div class="filter"><button type="button" data-kids-filter="mini" class="'+(kidsFilter==='mini'?'selected':'')+'">3–6 anni · proposte</button><button type="button" data-kids-filter="all" class="'+(kidsFilter==='all'?'selected':'')+'">Tutto il programma</button></div>';
+ var acts=(chosen.events||[]).filter(function(x){return kidsFilter==="all"||x[4]==="mini?"});
+ out+='<div class="card" style="padding:8px 14px"><p class="small" style="margin:8px 0">Orari di inizio delle attività; la durata non è specificata sul cartello. Verificare con il personale fascia d’età e modalità di partecipazione.</p>';
+ acts.forEach(function(e){
+  var hint=e[4]==="junior"?"Solo Junior 7–11":e[4]==="young"?"Young Club 12–14":e[4]==="mini?"?"Potenzialmente interessante per 3–6 anni":"Età e accesso da chiedere";
+  out+='<div class="deck-place"><div class="row" style="gap:10px;align-items:start"><strong style="min-width:52px;color:#0b5b80">'+esc(e[0])+'</strong><div style="flex:1"><strong>'+esc(e[1])+'</strong><div class="small">'+esc(e[2])+' · Ponte '+esc(e[3])+'</div><div class="small">'+esc(hint)+'</div></div></div></div>';
+ });
+ if(!acts.length)out+='<p>Non sono disponibili attività per questo filtro.</p>';
+ out+='</div><div class="card"><strong>🍽️ Fun Time Lunch / Dinner</strong><p class="small">Nel programma sono alle 12:00 (La Foglia, ponte 5) e alle 19:30 (Il Mercato, ponte 18). Sono attività organizzate dai Kids Clubs, NON gli orari generali di pranzo e cena. Chiedi iscrizione, età ammessa ed eventuali regole.</p></div>';
  return out;
 }
 function placeById(id){return onboardDirectory().venues.find(function(v){return v.id===id})||null}
@@ -387,7 +413,7 @@ function timelineRender(date,timeline){
 function mainPortUpdate(date){
  return chatUpdates.find(function(u){return u.port_date===date&&u.category==="escursione"&&/^escursione-proposta-/.test(u.slug||"")})||null;
 }
-function portNotes(date,omit){return chatUpdates.filter(function(u){return u.port_date===date&&u!==omit&&!isTimelineUpdate(u)})}
+function portNotes(date,omit){return chatUpdates.filter(function(u){return u.port_date===date&&u!==omit&&!isTimelineUpdate(u)&&!isOnboardDirectory(u)})}
 function portSections(u){
  var body=String(u.body||""),parts=body.split(/\n\s*\n/).filter(function(s){return s.trim()});
  if(parts.length===1&&body.length>1000)parts=body.split(/\n(?=[A-ZÀ-Ù][A-ZÀ-Ù 0-9()\/\-]{4,65}:)/).filter(Boolean);
@@ -449,6 +475,8 @@ function render(){
  else{out+='<div class="card"><strong>Timeline in caricamento</strong><p class="small">Aggiorna i contenuti o consulta gli appunti originali qui sotto.</p><button class="btn tiny secondary" id="refreshPortTimeline">Aggiorna itinerario</button></div>'}
  if(u){out+='<details class="card shipdetail timeline-source"><summary>Appunti completi e fonti</summary><div class="chatbody" style="padding:16px">'+esc(u.body)+'</div></details>'}
  if(others.length){out+='<details class="card shipdetail timeline-source"><summary>Altri consigli del giorno ('+others.length+')</summary><div style="padding:12px 15px">'+others.map(function(x){return '<details class="shipdetail"><summary>'+esc(x.title)+'</summary><div class="chatbody" style="padding:12px">'+esc(x.body)+'</div></details>'}).join('')+'</div></details>'}
+ var portKids=kidsScheduleFor(selectedPort);
+ if(portKids){out+='<div class="card"><div class="row"><h3>🧒 Mini Club · '+esc(portKids.city)+'</h3><button type="button" class="btn tiny secondary" data-kids-from-port="'+esc(selectedPort)+'">Orari ›</button></div><p class="small">Open House con i genitori: '+esc(portKids.openHouse.join(' e '))+'. Trovate anche LEGO, Doremi e laboratori: verificare l’accesso 3–6 anni.</p></div>'}
  out+='<div class="card"><button class="btn tiny secondary" id="addPortNote">Aggiungi una nota per questo scalo</button></div>';
  }else if(page==="nave"){
  out='<h2>Vita a bordo</h2><p class="small">Guida pratica della vostra settimana: apri un argomento per leggere tutti i dettagli salvati dalla chat.</p>';
@@ -504,6 +532,7 @@ function render(){
    if(!es.length)out+='<div class="card">Percorsi in caricamento. Controlla la connessione e aggiorna le informazioni.</div>';
   }
  }else if(shipTab!=="locali"){
+ if(shipTab==="bambini")out+=kidsActivityHtml(kidsSelectedDate||"2026-10-25");
  var tips=chatUpdates.filter(function(u){return shipGuideMatch(u,shipTab)}).sort(function(a,b){return shipGuideSort(a,b,shipTab)});
  var intro={
  piscine:["Piscine e nuoto","La Botanic Garden con copertura scorrevole è la prima scelta a fine ottobre. Per i piccoli valutate l'area acquatica Aurora Borealis, secondo il meteo. La Plage è l'opzione più plausibile per qualche breve vasca; non ci sono corsie sportive dedicate. Zen Pool è riservata agli adulti. Gli orari e le temperature dell'acqua vanno verificati a bordo."],
@@ -568,6 +597,9 @@ function render(){
  ref("page").innerHTML=out;
  ref("page").querySelectorAll("[data-go]").forEach(function(b){b.onclick=function(){tab(b.dataset.go)}});
  ref("page").querySelectorAll("[data-openport]").forEach(function(b){b.onclick=function(){openPort(b.dataset.openport)}});
+ ref("page").querySelectorAll("[data-kids-from-port]").forEach(function(b){b.onclick=function(){kidsSelectedDate=b.dataset.kidsFromPort;kidsFilter="mini";shipTab="bambini";tab("nave")}});
+ ref("page").querySelectorAll("[data-kids-day]").forEach(function(b){b.onclick=function(){kidsSelectedDate=b.dataset.kidsDay;render()}});
+ ref("page").querySelectorAll("[data-kids-filter]").forEach(function(b){b.onclick=function(){kidsFilter=b.dataset.kidsFilter;render()}});
  ref("page").querySelectorAll("[data-route-from-stops]").forEach(function(b){b.onclick=function(){shipTab="percorsi";onboardExperienceId=b.dataset.routeFromStops;onboardPlaceId="";tab("nave")}});
  if(ref("backToStops"))ref("backToStops").onclick=function(){tab("tappe")};
  if(ref("refreshPortTimeline"))ref("refreshPortTimeline").onclick=function(){loadChatUpdates()};
