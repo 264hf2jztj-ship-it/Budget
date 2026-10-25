@@ -198,13 +198,22 @@ function onboardDirectory(){
  return out;
 }
 function restaurantHoursFor(id){return onboardDirectory().hours.find(function(x){return x.id===id})||null}
-function restaurantHoursCard(row,withTitle){
+function restaurantHoursCard(row){
  if(!row)return "";
+ var confirmed=row.confirmed||{};
+ var confirmedCount=(row.schedule||[]).filter(function(part){return confirmed[part[0]]&&confirmed[part[0]].date}).length;
  var out='<div class="card"><div class="row"><strong>'+esc(row.name)+'</strong><span class="badge">Ponte '+esc(row.deck)+'</span></div>';
- out+='<div class="small" style="margin:6px 0;color:#8b631f">⚠️ Orari indicativi · da verificare su MSC for Me</div>';
- (row.schedule||[]).forEach(function(part){out+='<div class="venue"><div class="row"><span>'+esc(part[0])+'</span><strong style="text-align:right">'+esc(part[1])+'</strong></div></div>'});
+ out+='<div class="small" style="margin:6px 0;color:'+(confirmedCount?'#14745d':'#8b631f')+'">'+(confirmedCount?'✅ Alcuni orari rilevati a bordo':'⚠️ Orari indicativi · da verificare a bordo')+'</div>';
+ (row.schedule||[]).forEach(function(part){
+  var proof=confirmed[part[0]];
+  out+='<div class="venue"><div class="row"><span>'+esc(part[0])+'</span><strong style="text-align:right">'+esc(part[1])+'</strong></div>';
+  if(proof&&proof.date)out+='<div class="small" style="color:#14745d;font-weight:650">✓ Confermato sul cartello il '+esc(proof.date.slice(8,10))+'/'+esc(proof.date.slice(5,7))+'/'+esc(proof.date.slice(0,4))+'</div>';
+  else out+='<div class="small" style="color:#8b631f">Indicativo · non confermato</div>';
+  out+='</div>';
+ });
  if(row.note)out+='<p class="small">'+esc(row.note)+'</p>';
- if(row.src&&/^https:\/\//.test(row.src))out+='<a class="small" href="'+esc(row.src)+'" target="_blank" rel="noopener noreferrer">Fonte degli orari indicativi ↗</a>';
+ if(confirmedCount)out+='<p class="small">Gli orari rilevati in un giorno possono cambiare nei giorni successivi. Controlla sempre il cartello all’ingresso.</p>';
+ if(row.src&&/^https:\/\//.test(row.src))out+='<a class="small" href="'+esc(row.src)+'" target="_blank" rel="noopener noreferrer">Fonte degli orari orientativi ↗</a>';
  out+='</div>';
  return out;
 }
@@ -482,7 +491,7 @@ function render(){
  }else if(shipTab==="orari"){
   var scheduleGuide=onboardDirectory();
   out+='<h2>🕒 Orari dei ristoranti</h2>';
-  out+='<div class="timeline-warning"><strong>Orari NON confermati per oggi</strong><div>Questi sono riferimenti pubblicati per crociere precedenti della MSC World Europa. Gli orari reali di oggi e il turno della tua cena sono su MSC for Me, sulla Cruise Card o all’ingresso dei locali.</div></div>';
+  out+='<div class="timeline-warning"><strong>Orari confermati e indicativi</strong><div>✅ = verificati su cartelli fotografati a bordo, con data. ⚠️ = indicativi, tratti da guide precedenti. L’orario e il turno della tua cena sono indicati sulla Cruise Card; gli altri orari vanno verificati all’ingresso.</div></div>';
   scheduleGuide.hoursGeneral.forEach(function(g){out+='<details class="card shipdetail"><summary>'+esc(g[0])+'</summary><div style="padding:12px 16px"><p>'+esc(g[1])+'</p>'+(g[2]?'<a href="'+esc(g[2])+'" target="_blank" rel="noopener noreferrer">Indicazioni MSC ↗</a>':'')+'</div></details>'});
   scheduleGuide.hours.forEach(function(v){out+=restaurantHoursCard(v)});
   if(!scheduleGuide.hours.length)out+='<div class="card">Gli orari sono in caricamento. Premi Aggiorna dalla sezione Dalla chat e riprova.</div>';
