@@ -108,6 +108,7 @@ function chatLabel(cat){return {logistica:"Logistica",ristorazione:"Ristorazione
 function shipGuideMatch(u,kind){
  var slug=String(u.slug||"");
  if(kind==="piscine")return u.category==="attivita"&&/piscine|aquapark/.test(slug);
+ if(kind==="sport")return u.category==="attivita"&&/^msc-world-europa-sport-/.test(slug);
  if(kind==="spettacoli")return u.category==="attivita"&&/teatro|spettacoli|serate|panorama|giornata-navigazione/.test(slug);
  if(kind==="bambini")return /doremiland|mini-club|lego|genitori-restrizioni|halloween/.test(slug);
  return false;
@@ -115,6 +116,7 @@ function shipGuideMatch(u,kind){
 function shipGuideSort(a,b,kind){
  var rank={
  piscine:[/piscine-msc-world-europa/,/world-europa-piscine/],
+ sport:[/sport-gym-2026/,/sport-sportplex-2026/,/sport-corsi-daily-2025/,/sport-piscine-e-piano-settimana/],
  spettacoli:[/world-europa-teatro/,/world-europa-serate/,/world-europa-panorama/,/world-europa-spettacoli/,/giornata-navigazione/],
  bambini:[/family-doremiland/,/mini-club-sessioni-brevi/,/lego-duplo-famiglia/,/attivita-con-genitori-restrizioni/,/pasti-e-mini-club/,/halloween-attivita-e-cautela/,/msc-halloween/,/^halloween-2026/,/^mini-club-/]
  };
@@ -205,11 +207,12 @@ function render(){
  })
  }else if(page==="nave"){
  out='<h2>Vita a bordo</h2><p class="small">Guida pratica della vostra settimana: apri un argomento per leggere tutti i dettagli salvati dalla chat.</p>';
- out+='<div class="filter" aria-label="Argomenti a bordo">'+[["piscine","🏊 Piscine"],["spettacoli","🎭 Spettacoli"],["bambini","🧒 Bambini"],["locali","🍽️ Ristoranti e bar"]].map(function(f){return '<button data-ship-tab="'+f[0]+'" class="'+(shipTab===f[0]?'selected':'')+'">'+f[1]+'</button>'}).join("")+'</div>';
+ out+='<div class="filter" aria-label="Argomenti a bordo">'+[["piscine","🏊 Piscine"],["sport","🏋️ Sport"],["spettacoli","🎭 Spettacoli"],["bambini","🧒 Bambini"],["locali","🍽️ Ristoranti e bar"]].map(function(f){return '<button data-ship-tab="'+f[0]+'" class="'+(shipTab===f[0]?'selected':'')+'">'+f[1]+'</button>'}).join("")+'</div>';
  if(shipTab!=="locali"){
  var tips=chatUpdates.filter(function(u){return shipGuideMatch(u,shipTab)}).sort(function(a,b){return shipGuideSort(a,b,shipTab)});
  var intro={
  piscine:["Piscine e nuoto","La Botanic Garden con copertura scorrevole è la prima scelta a fine ottobre. Per i piccoli valutate l'area acquatica Aurora Borealis, secondo il meteo. La Plage è l'opzione più plausibile per qualche breve vasca; non ci sono corsie sportive dedicate. Zen Pool è riservata agli adulti. Gli orari e le temperature dell'acqua vanno verificati a bordo."],
+ sport:["Sport e fitness","Palestra Technogym al ponte 20 inclusa, Sportplex ai ponti 20/21 e corsi collettivi da verificare nel Daily Programme. La World Europa non ha un jogging track esterno dedicato; per correre utilizza i tapis roulant. Alcune attività e corsi sono a pagamento. Il programma suggerito privilegia due sedute brevi, senza sacrificare escursioni e tempo in famiglia."],
  spettacoli:["Teatro e serate","Nel World Theatre cercate Amelia, Eko e A Night on Broadway. La nave propone anche musica, eventi e feste in Panorama Lounge e Luna Park Arena. Il programma delle sette serate è un'idea di massima: date, titoli e prenotazioni effettivi si verificano su MSC for Me."],
  bambini:["Mini Club, LEGO, Doremi e Halloween","Mini Club 3–6 anni al Doremiland (ponte 19); meglio sessioni brevi e facoltative. Priorità alle attività in famiglia: DUPLO/LEGO, Doremi Family Disco, piscina e spettacoli adatti ai piccoli. Per Halloween cercate laboratori e parate, senza dare per certi gli orari. Verificate sempre eventuali limiti di età e di altezza."]
  }[shipTab];
