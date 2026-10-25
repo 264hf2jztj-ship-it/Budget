@@ -60,7 +60,7 @@ pre:["Documenti per tutti pronti","Carte d’imbarco salvate offline","Etichette
 board:["Seguire briefing sicurezza e verificare punto di riunione","Confermare turno cena e ristorante","Registrare la bambina al Mini Club (ponte 19)","Collegarsi al Wi-Fi della nave e aprire MSC for Me","Controllare spettacoli e attività","Visitare World Promenade e Botanic Garden Pool","Chiedere se MSC conserva il vino aperto tra le cene"],
 ports:["Verificare orario di rientro a bordo","Portare documenti e tessere necessarie","Controllare meteo e accessibilità col passeggino","Verificare telefono e mappe offline"]};
 function initState(){return {privateTrip:null,checked:["pre:0","pre:1","pre:2","pre:3","pre:4","pre:5"],liked:[],visited:[],notes:[],customTasks:[],customItems:[],selectedDate:"2026-10-25"}}
-var st=initState(),actor=null,db=null,revision=null,pending=false,conflict=false,busy=false,savingTimer=null,version=0,page="oggi",filter="all",term="",shipTab="piscine",selectedPort="";
+var st=initState(),actor=null,db=null,revision=null,pending=false,conflict=false,busy=false,savingTimer=null,version=0,page="oggi",filter="all",term="",shipTab="mappa",selectedPort="",shipMapDeck="";
 var chatUpdates=[],chatLoading=false,chatFeedError=null,chatSig="",chatFilter="all";
 var checklistItems=[],checklistLoading=false,checklistError=null,checklistSig="";
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]})}
@@ -137,6 +137,8 @@ function today(){var d=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Rome",y
 function chatCacheKey(){return "cruise.hub.chat.v1:"+actor.id}
 function chatLabel(cat){return {logistica:"Logistica",ristorazione:"Ristorazione",attivita:"Attività a bordo",escursione:"Escursioni",promemoria:"Promemoria",generale:"Consigli"}[cat]||"Aggiornamento"}
 
+var shipMapHighlights=[["6","Reception, World Theatre, Pizza & Burger"],["7","World Theatre, HOLA!, Kaito, Panorama Lounge"],["8","World Promenade, Sweet Temptations, MSC Aurea Spa"],["18","La Plage, Botanic Garden Pool, Zen Pool, Il Mercato"],["19","Doremiland, Mini Club, LEGO, La Brasserie"],["20","MSC Gym Technogym, Sportplex, Aquapark"]];
+var shipMapVenues=[["Doremiland / Mini Club","19"],["LEGO / DUPLO","19"],["La Brasserie Buffet","19"],["MSC Gym Technogym","20"],["MSC Sportplex","20"],["Aurora Borealis Aquapark","20"],["Botanic Garden Pool","18"],["La Plage Pool","18"],["Zen Pool adulti","18"],["Il Mercato Buffet","18"],["World Theatre","6 e 7"],["Panorama Lounge","6 e 7"],["Luna Park Arena","5 e 6"],["Reception / Guest Services","6"],["Pizza & Burger","6"],["HOLA! Tacos & Cantina","7"],["Kaito Sushi e Teppanyaki","7"],["Masters of the Sea","7"],["World Promenade","8"],["Sweet Temptations","8"],["MSC Aurea Spa","8"],["Raj Polo Tea House","8"]];
 function shipGuideMatch(u,kind){
  var slug=String(u.slug||"");
  if(kind==="piscine")return u.category==="attivita"&&/piscine|aquapark/.test(slug);
@@ -278,8 +280,25 @@ function render(){
  out+='<div class="card"><button class="btn tiny secondary" id="addPortNote">Aggiungi una nota per questo scalo</button></div>';
  }else if(page==="nave"){
  out='<h2>Vita a bordo</h2><p class="small">Guida pratica della vostra settimana: apri un argomento per leggere tutti i dettagli salvati dalla chat.</p>';
- out+='<div class="filter" aria-label="Argomenti a bordo">'+[["piscine","🏊 Piscine"],["sport","🏋️ Sport"],["spettacoli","🎭 Spettacoli"],["bambini","🧒 Bambini"],["locali","🍽️ Ristoranti e bar"]].map(function(f){return '<button data-ship-tab="'+f[0]+'" class="'+(shipTab===f[0]?'selected':'')+'">'+f[1]+'</button>'}).join("")+'</div>';
- if(shipTab!=="locali"){
+ out+='<div class="filter" aria-label="Argomenti a bordo">'+[["mappa","🧭 Mappa"],["piscine","🏊 Piscine"],["sport","🏋️ Sport"],["spettacoli","🎭 Spettacoli"],["bambini","🧒 Bambini"],["locali","🍽️ Ristoranti e bar"]].map(function(f){return '<button data-ship-tab="'+f[0]+'" class="'+(shipTab===f[0]?'selected':'')+'">'+f[1]+'</button>'}).join("")+'</div>';
+ if(shipTab==="mappa"){
+ out+='<div class="shipintro"><strong>🧭 Trova il ponte giusto</strong><p>Scegli il ponte oppure cerca un locale. Questa è una mappa rapida per orientarti; per corridoi e ascensori esatti fa fede il piano MSC.</p></div>';
+ out+='<input type="search" id="shipMapSearch" placeholder="Cerca: mini club, palestra, teatro..." style="margin-top:12px">';
+ out+='<div id="shipMapResults">';
+ shipMapHighlights.forEach(function(x){
+   out+='<button class="stop-card" data-map-deck="'+esc(x[0])+'"><div class="row"><strong style="font-size:18px;color:#0b5b80">Ponte '+esc(x[0])+'</strong><span class="stop-pill">Esplora ›</span></div><p class="small">'+esc(x[1])+'</p></button>';
+ });
+ out+='<h3>Indice dei luoghi</h3>';
+ shipMapVenues.forEach(function(v){
+   out+='<div class="venue ship-map-place"><div class="row"><strong>'+esc(v[0])+'</strong><span class="badge">Ponte '+esc(v[1])+'</span></div></div>';
+ });
+ out+='</div>';
+ if(shipMapDeck){
+ var matches=shipMapVenues.filter(function(v){return v[1].split(/[^0-9]+/).includes(shipMapDeck)});
+ out+='<div class="card"><div class="row"><h3>Destinazioni sul ponte '+esc(shipMapDeck)+'</h3><button class="btn tiny secondary" id="clearMapDeck">Tutti</button></div>'+matches.map(function(v){return '<div class="venue"><strong>'+esc(v[0])+'</strong></div>'}).join("")+'</div>';
+ }
+ out+='<div class="card"><p><strong>Planimetria ufficiale MSC</strong></p><p class="small">Per individuare scale, ascensori, prora e poppa apri il piano nave originale. Puoi salvarne il PDF in GoodReader.</p><a href="https://www.msccruises.co.uk/content/dam/msc-cruises/b2c-assets/fleet/msc-world-europa/MSC_WORLD_EUROPA_DECKPLAN.pdf" target="_blank" rel="noopener noreferrer">Apri piano nave ufficiale (PDF)</a></div>';
+ }else if(shipTab!=="locali"){
  var tips=chatUpdates.filter(function(u){return shipGuideMatch(u,shipTab)}).sort(function(a,b){return shipGuideSort(a,b,shipTab)});
  var intro={
  piscine:["Piscine e nuoto","La Botanic Garden con copertura scorrevole è la prima scelta a fine ottobre. Per i piccoli valutate l'area acquatica Aurora Borealis, secondo il meteo. La Plage è l'opzione più plausibile per qualche breve vasca; non ci sono corsie sportive dedicate. Zen Pool è riservata agli adulti. Gli orari e le temperature dell'acqua vanno verificati a bordo."],
@@ -343,7 +362,10 @@ function render(){
  if(ref("offlineExport"))ref("offlineExport").onclick=exportOfflineFile;
  ref("page").querySelectorAll("[data-filter]").forEach(function(b){b.onclick=function(){filter=b.dataset.filter;render()}});
  ref("page").querySelectorAll("[data-chat-filter]").forEach(function(b){b.onclick=function(){chatFilter=b.dataset.chatFilter;render()}});
- ref("page").querySelectorAll("[data-ship-tab]").forEach(function(b){b.onclick=function(){shipTab=b.dataset.shipTab;render()}});
+ ref("page").querySelectorAll("[data-ship-tab]").forEach(function(b){b.onclick=function(){shipTab=b.dataset.shipTab;shipMapDeck="";render()}});
+ ref("page").querySelectorAll("[data-map-deck]").forEach(function(b){b.onclick=function(){shipMapDeck=b.dataset.mapDeck;render();var anchor=ref("clearMapDeck");if(anchor)anchor.scrollIntoView({block:"nearest"})}});
+ if(ref("clearMapDeck"))ref("clearMapDeck").onclick=function(){shipMapDeck="";render()};
+ var mapQ=ref("shipMapSearch");if(mapQ){mapQ.oninput=function(){var q=mapQ.value.trim().toLowerCase();ref("shipMapResults").querySelectorAll(".ship-map-place").forEach(function(el){el.style.display=el.textContent.toLowerCase().includes(q)?"":"none"});ref("shipMapResults").querySelectorAll("[data-map-deck]").forEach(function(el){el.style.display=el.textContent.toLowerCase().includes(q)?"":"none"})}};
  if(ref("refreshShipTips"))ref("refreshShipTips").onclick=function(){loadChatUpdates()};
  if(ref("refreshChat"))ref("refreshChat").onclick=function(){loadChatUpdates()};
  var search=ref("searchVenues");if(search){search.oninput=function(){term=search.value;var pos=search.selectionStart;render();ref("searchVenues").focus();ref("searchVenues").setSelectionRange(pos,pos)}} 
