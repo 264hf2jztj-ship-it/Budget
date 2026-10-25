@@ -13,6 +13,19 @@
 .deck-back{display:inline-flex;align-items:center;gap:6px;margin:12px 0 4px}
 .deck-place{padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}
 .deck-place:last-child{border-bottom:0}
+.place-button{width:100%;text-align:left;border:0;background:white;color:var(--ink);padding:14px 8px;display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--line)}
+.place-button:last-child{border:0}
+.place-button strong{font-size:15px}
+.place-tip{display:grid;grid-template-columns:24px 1fr;gap:9px;padding:12px 0;border-bottom:1px solid var(--line);line-height:1.55}
+.place-tip:last-child{border:0}
+.route-stop{padding:13px 0;border-bottom:1px solid var(--line)}
+.route-stop:last-child{border:0}
+.route-time{color:#0b6887;font-weight:700;font-size:12px}
+.route-stop strong{display:block;font-size:15px;margin:4px 0}
+.route-stop p{margin:0 0 8px;font-size:13px}
+.place-route-link{border:1px solid #c9e3e9;border-radius:9px;background:#eaf5f8;color:#0b5b80;padding:8px 11px;font-size:12px;font-weight:650}
+.venue-explore{font-size:12px;padding:8px 11px;margin-top:8px;border:1px solid #cae2e9;border-radius:9px;color:#0b5b80;background:#eaf6f9}
+
 .deck-header{border-radius:15px;padding:17px;margin:12px 0;background:linear-gradient(135deg,#0b5977,#168c98);color:white}
 .deck-header h3{font-size:24px;line-height:1.2;margin:4px 0 10px}
 .deck-header p{color:#e7f4f7;margin:0;line-height:1.45}
@@ -91,7 +104,7 @@ pre:["Documenti per tutti pronti","Carte d’imbarco salvate offline","Etichette
 board:["Seguire briefing sicurezza e verificare punto di riunione","Confermare turno cena e ristorante","Registrare la bambina al Mini Club (ponte 19)","Collegarsi al Wi-Fi della nave e aprire MSC for Me","Controllare spettacoli e attività","Visitare World Promenade e Botanic Garden Pool","Chiedere se MSC conserva il vino aperto tra le cene"],
 ports:["Verificare orario di rientro a bordo","Portare documenti e tessere necessarie","Controllare meteo e accessibilità col passeggino","Verificare telefono e mappe offline"]};
 function initState(){return {privateTrip:null,checked:["pre:0","pre:1","pre:2","pre:3","pre:4","pre:5"],liked:[],visited:[],notes:[],customTasks:[],customItems:[],selectedDate:"2026-10-25"}}
-var st=initState(),actor=null,db=null,revision=null,pending=false,conflict=false,busy=false,savingTimer=null,version=0,page="oggi",filter="all",term="",shipTab="mappa",selectedPort="",shipMapDeck="",portRouteChoice={};
+var st=initState(),actor=null,db=null,revision=null,pending=false,conflict=false,busy=false,savingTimer=null,version=0,page="oggi",filter="all",term="",shipTab="mappa",selectedPort="",shipMapDeck="",portRouteChoice={},onboardPlaceId="",onboardExperienceId="",onboardPlaceOrigin="mappa";
 var chatUpdates=[],chatLoading=false,chatFeedError=null,chatSig="",chatFilter="all";
 var checklistItems=[],checklistLoading=false,checklistError=null,checklistSig="";
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]})}
@@ -170,6 +183,53 @@ function chatLabel(cat){return {logistica:"Logistica",ristorazione:"Ristorazione
 
 var shipMapHighlights=[["10","Ponte Vienna · cabine"],["6","Reception, World Theatre, Pizza & Burger"],["7","World Theatre, HOLA!, Kaito, Panorama Lounge"],["8","World Promenade, Sweet Temptations, MSC Aurea Spa"],["18","La Plage, Botanic Garden Pool, Zen Pool, Il Mercato"],["19","Doremiland, Mini Club, LEGO, La Brasserie"],["20","MSC Gym Technogym, Sportplex, Aquapark"]];
 var shipMapVenues=[["Cabine · ponte Vienna","10"],["Doremiland / Mini Club","19"],["LEGO / DUPLO","19"],["La Brasserie Buffet","19"],["MSC Gym Technogym","20"],["MSC Sportplex","20"],["Aurora Borealis Aquapark","20"],["Botanic Garden Pool","18"],["La Plage Pool","18"],["Zen Pool adulti","18"],["Il Mercato Buffet","18"],["World Theatre","6 e 7"],["Panorama Lounge","6 e 7"],["Luna Park Arena","5 e 6"],["Reception / Guest Services","6"],["Pizza & Burger","6"],["HOLA! Tacos & Cantina","7"],["Kaito Sushi e Teppanyaki","7"],["Masters of the Sea","7"],["World Promenade","8"],["Sweet Temptations","8"],["MSC Aurea Spa","8"],["Raj Polo Tea House","8"]];
+function isOnboardDirectory(u){return /^onboard-dir-/.test(String(u&&u.slug||""))}
+function onboardDirectory(){
+ var out={general:[],venues:[],experiences:[]};
+ chatUpdates.filter(isOnboardDirectory).forEach(function(u){
+  try{
+   var x=JSON.parse(u.body);if(!x||x.v!==1)return;
+   if(x.type==="policies")out.general=out.general.concat(x.general||[]);
+   else if(x.type==="venues")out.venues=out.venues.concat((x.items||[]).map(function(v){return {id:v[0],name:v[1],deck:v[2],price:v[3],short:v[4]}}));
+   else if(x.type==="experiences")out.experiences=out.experiences.concat(x.items||[]);
+  }catch(err){}
+ });
+ return out;
+}
+function placeById(id){return onboardDirectory().venues.find(function(v){return v.id===id})||null}
+function placeFromName(name){
+ var needle=String(name||"").toLocaleLowerCase("it").replace(/[^a-z0-9àèéìòù]+/g," ").trim(),vs=onboardDirectory().venues;
+ return vs.find(function(v){var n=v.name.toLocaleLowerCase("it").replace(/[^a-z0-9àèéìòù]+/g," ").trim();return n===needle||n.indexOf(needle)===0||needle.indexOf(n)===0})||null;
+}
+function onboardExperience(id){return onboardDirectory().experiences.find(function(x){return x.id===id})||null}
+function onboardPlaceDetails(place,mine){
+ var out='<div class="deck-header"><span>🚢 Guida ai locali</span><h3>'+esc(place.name)+'</h3><p>Ponte '+esc(place.deck)+' · '+esc(place.price)+'</p></div>';
+ out+='<div class="card"><h3>Perché andarci</h3><p>'+esc(place.short)+'</p>';
+ if(place.id==="cabine"&&mine){out+='<p class="small">La tua cabina: '+esc(mine.title)+'</p><details class="shipdetail"><summary>Indicazioni per gli ascensori</summary><div class="chatbody" style="padding:12px">'+esc(mine.body)+'</div></details>'}
+ if(place.id==="pescaderia")out+='<p class="small">Consiglio: scegli il banco Grab & Go se vuoi solo il cuoppo; il ristorante al tavolo è un servizio separato.</p>';
+ if(place.id==="mercato"||place.id==="brasserie")out+='<p class="small">Le bevande standard dei dispenser del buffet sono incluse, mentre quelle del bar non necessariamente.</p>';
+ out+='</div>';
+ out+='<div class="card"><h3>Informazioni utili</h3><div class="place-tip"><span>💡</span><div>'+esc(place.short)+'</div></div>';
+ out+='<div class="place-tip"><span>💳</span><div>Costo: '+esc(place.price)+'. Eventuali offerte, menu e servizi cambiano: verifica il listino a bordo.</div></div>';
+ if(place.id==="pescaderia")out+='<div class="place-tip"><span>🐟</span><div>Cuoppo da asporto da gustare sulla World Promenade. Conferma disponibilità e prezzo.</div></div>';
+ if(place.id==="zest")out+='<div class="place-tip"><span>🥤</span><div>I centrifugati freschi sono extra, distinti dai succhi ai dispenser dei buffet.</div></div>';
+ if(place.id==="dolce"||place.id==="gin"||place.id==="fizz"||place.id==="elixir")out+='<div class="place-tip"><span>🍸</span><div>Puoi acquistare un solo cocktail senza sottoscrivere un pacchetto bevande.</div></div>';
+ out+='</div>';
+ out+='<div class="card"><h3>Approfondimenti</h3><p class="small">Per disponibilità, regole e orari fa fede il programma MSC. La mappa del ponte indica le destinazioni, non la posizione esatta dei corridoi.</p></div>';
+ return out;
+}
+function onboardExperienceDetails(ex){
+ var out='<div class="card"><h3>'+esc(ex.title)+'</h3><p>'+esc(ex.summary)+'</p><p class="small">Durata suggerita: '+esc(ex.duration||"flessibile")+'. Non è una prenotazione.</p></div>';
+ out+='<div class="timeline">';
+ (ex.steps||[]).forEach(function(t){
+  out+='<div class="timeline-line"><div class="timeline-time">'+esc(t[0])+'</div><div class="timeline-info"><div class="timeline-item"><h3>'+esc(t[1])+'</h3><p>'+esc(t[2])+'</p>';
+  if(placeById(t[3]))out+='<button type="button" class="place-route-link" data-open-place="'+esc(t[3])+'">Scheda del luogo ›</button>';
+  out+='</div></div></div>';
+ });
+ out+='</div>';
+ if(ex.warning)out+='<div class="timeline-warning"><strong>Da ricordare</strong><div>'+esc(ex.warning)+'</div></div>';
+ return out;
+}
 function cabinUpdate(){return chatUpdates.find(function(u){return u.slug==="cabina-msc-world-europa-2026"})||null}
 function shipGuideMatch(u,kind){
  var slug=String(u.slug||"");
@@ -253,7 +313,7 @@ async function loadChecklistItems(){
  finally{checklistLoading=false}
 }
 function isTimelineUpdate(u){return /^timeline-20[0-9]{2}-[0-9]{2}-[0-9]{2}$/.test(String(u&&u.slug||""))}
-function visibleChatUpdates(){return chatUpdates.filter(function(u){return !isTimelineUpdate(u)})}
+function visibleChatUpdates(){return chatUpdates.filter(function(u){return !isTimelineUpdate(u)&&!isOnboardDirectory(u)})}
 function timelineForPort(date){
  var u=chatUpdates.find(function(x){return x.slug==="timeline-"+date});
  if(!u)return null;
@@ -354,39 +414,50 @@ function render(){
  out+='<div class="card"><button class="btn tiny secondary" id="addPortNote">Aggiungi una nota per questo scalo</button></div>';
  }else if(page==="nave"){
  out='<h2>Vita a bordo</h2><p class="small">Guida pratica della vostra settimana: apri un argomento per leggere tutti i dettagli salvati dalla chat.</p>';
- out+='<div class="filter" aria-label="Argomenti a bordo">'+[["mappa","🧭 Mappa"],["piscine","🏊 Piscine"],["sport","🏋️ Sport"],["spettacoli","🎭 Spettacoli"],["bambini","🧒 Bambini"],["locali","🍽️ Ristoranti e bar"]].map(function(f){return '<button data-ship-tab="'+f[0]+'" class="'+(shipTab===f[0]?'selected':'')+'">'+f[1]+'</button>'}).join("")+'</div>';
+ out+='<div class="filter" aria-label="Argomenti a bordo">'+[["mappa","🧭 Mappa"],["percorsi","✨ Percorsi"],["consigli","💡 Consigli"],["piscine","🏊 Piscine"],["sport","🏋️ Sport"],["spettacoli","🎭 Spettacoli"],["bambini","🧒 Bambini"],["locali","🍽️ Ristoranti e bar"]].map(function(f){return '<button data-ship-tab="'+f[0]+'" class="'+(shipTab===f[0]?'selected':'')+'">'+f[1]+'</button>'}).join("")+'</div>';
  if(shipTab==="mappa"){
- var mine=cabinUpdate();
+ var mine=cabinUpdate(),dir=onboardDirectory();
  var pdfLink='https://www.msccruises.ie/content/dam/msc-cruises/b2c-assets/fleet/msc-world-europa/MSC_WORLD_EUROPA_DECKPLAN.pdf';
- if(shipMapDeck){
+ var places=dir.venues.length?dir.venues:shipMapVenues.map(function(v){return {id:v[0],name:v[0],deck:v[1],price:"Da verificare",short:"Consulta il programma MSC per orari e disponibilità."}});
+ if(onboardPlaceId){
+  var place=placeById(onboardPlaceId);
+  out+='<button class="btn secondary deck-back" id="backFromPlace">← '+(onboardPlaceOrigin==="percorsi"?"Ritorna al percorso":onboardPlaceOrigin==="locali"?"Torna ai ristoranti":"Torna al ponte")+'</button>';
+  if(place)out+=onboardPlaceDetails(place,mine);
+  else out+='<div class="card">Dettagli del luogo non disponibili. Ricarica la guida.</div>';
+ }else if(shipMapDeck){
   var matchDeck=shipMapHighlights.find(function(x){return x[0]===shipMapDeck});
-  var matches=shipMapVenues.filter(function(v){return v[1].split(/[^0-9]+/).includes(shipMapDeck)});
+  var matches=places.filter(function(v){return String(v.deck).split(/[^0-9]+/).includes(shipMapDeck)});
   out+='<button class="btn secondary deck-back" id="clearMapDeck">← Tutti i ponti</button>';
-  out+='<div class="deck-header"><span>🧭 MSC World Europa</span><h3>Ponte '+esc(shipMapDeck)+'</h3><p>'+esc(matchDeck?matchDeck[1]:"Destinazioni del ponte selezionato")+'</p></div>';
-  if(shipMapDeck==="10"&&mine){
-   out+='<div class="card"><h3>📍 La nostra cabina</h3><p style="margin-bottom:4px">'+esc(mine.title)+'</p><p class="small">A prua, lato dritto. Per raggiungere gli ascensori, prosegui verso il centro nave.</p><details class="shipdetail"><summary>Percorso e dettagli</summary><div class="chatbody" style="padding:12px">'+esc(mine.body)+'</div></details></div>';
-  }
-  out+='<div class="card"><h3>Luoghi su questo ponte</h3>';
-  if(matches.length){matches.forEach(function(v){out+='<div class="deck-place">'+esc(v[0])+'</div>'})}
-  else{out+='<p class="small">Non ci sono locali inseriti nella guida rapida per questo ponte.</p>'}
+  out+='<div class="deck-header"><span>🧭 MSC World Europa</span><h3>Ponte '+esc(shipMapDeck)+'</h3><p>'+esc(matchDeck?matchDeck[1]:"Destinazioni del ponte")+'</p></div>';
+  if(shipMapDeck==="10"&&mine)out+='<div class="card"><h3>📍 La nostra cabina</h3><p>'+esc(mine.title)+'</p><p class="small">Prua, lato dritto; vai verso il centro nave per gli ascensori.</p></div>';
+  out+='<div class="card" style="padding:10px 14px"><h3>Luoghi su questo ponte</h3><p class="small">Tocca un posto per leggere i consigli utili.</p>';
+  if(matches.length)matches.forEach(function(v){out+='<button type="button" class="place-button" data-open-place="'+esc(v.id)+'"><strong>'+esc(v.name)+'</strong><span class="stop-pill">Info ›</span></button>'});
+  else out+='<p class="small">Nessun locale registrato per questo ponte.</p>';
   out+='</div>';
-  out+='<div class="card"><h3>Dove sono corridoi e ascensori?</h3><p class="small">La lista indica il ponte, non la posizione precisa del locale. Per orientarti da prua a poppa e scegliere scale o ascensori, consulta il piano MSC.</p><a class="deck-guide-link" href="'+pdfLink+'" target="_blank" rel="noopener noreferrer">📄 Planimetria ufficiale MSC ↗</a></div>';
+  out+='<div class="card"><strong>Ascensori e corridoi</strong><p class="small">Per la posizione esatta usa il PDF ufficiale MSC.</p><a class="deck-guide-link" href="'+pdfLink+'" target="_blank" rel="noopener noreferrer">📄 Planimetria MSC ↗</a></div>';
  }else{
-  out+='<div class="shipintro"><strong>🧭 Trova il ponte giusto</strong><p>Tocca Esplora per aprire una schermata dedicata ai locali di quel ponte. Per ascensori e corridoi usa il piano ufficiale MSC.</p></div>';
-  if(mine){out+='<div class="card"><div class="row"><strong>📍 La nostra cabina</strong><span class="badge">Ponte 10</span></div><p>'+esc(mine.title)+'</p><p class="small">Prua, lato dritto. Dalla cabina prosegui verso centro nave per raggiungere il gruppo ascensori.</p><button type="button" class="btn tiny secondary" data-map-deck="10">Visualizza ponte 10 ›</button></div>'}
-  out+='<input type="search" id="shipMapSearch" placeholder="Cerca: mini club, palestra, teatro..." aria-label="Cerca ponti e locali">';
+  out+='<div class="shipintro"><strong>🧭 Trova un luogo</strong><p>Cerca per nome oppure seleziona un ponte, poi tocca il posto per leggere consigli e costi.</p></div>';
+  if(mine)out+='<div class="card"><div class="row"><strong>📍 La nostra cabina</strong><span class="badge">Ponte 10</span></div><p>'+esc(mine.title)+'</p><button type="button" class="btn tiny secondary" data-map-deck="10">Visualizza ponte 10 ›</button></div>';
+  out+='<input type="search" id="shipMapSearch" placeholder="Cerca: Pescaderia, piscina, teatro..." aria-label="Cerca ponti e locali">';
   out+='<div id="shipMapResults">';
-  shipMapHighlights.forEach(function(x){
-   out+='<button type="button" class="stop-card" data-map-deck="'+esc(x[0])+'"><div class="row"><strong style="font-size:18px;color:#0b5b80">Ponte '+esc(x[0])+'</strong><span class="stop-pill">Esplora ›</span></div><p class="small">'+esc(x[1])+'</p></button>';
-  });
-  out+='<h3>Indice dei luoghi</h3>';
-  shipMapVenues.forEach(function(v){
-   var first=(v[1].match(/[0-9]+/)||[])[0]||"";
-   out+='<button type="button" class="stop-card ship-map-place" style="margin:7px 0;padding:12px" data-map-deck="'+esc(first)+'"><div class="row"><strong>'+esc(v[0])+'</strong><span class="badge">Ponte '+esc(v[1])+'</span></div></button>';
-  });
-  out+='</div>';
-  out+='<div class="card"><strong>Planimetria ufficiale</strong><p class="small">Puoi salvare in GoodReader il PDF ufficiale con ponti, ascensori, scale e corridoi.</p><a class="deck-guide-link" href="'+pdfLink+'" target="_blank" rel="noopener noreferrer">📄 Apri piano nave ↗</a></div>';
+  shipMapHighlights.forEach(function(x){out+='<button type="button" class="stop-card" data-map-deck="'+esc(x[0])+'"><div class="row"><strong>Ponte '+esc(x[0])+'</strong><span class="stop-pill">Esplora ›</span></div><p class="small">'+esc(x[1])+'</p></button>'});
+  out+='<h3>Tutti i luoghi</h3>';
+  places.forEach(function(v){out+='<button type="button" class="stop-card ship-map-place" style="padding:12px;margin:7px 0" data-open-place="'+esc(v.id)+'"><div class="row"><strong>'+esc(v.name)+'</strong><span class="badge">Ponte '+esc(v.deck)+'</span></div></button>'});
+  out+='</div><div class="card"><p class="small">Per la posizione esatta di ascensori e scale:</p><a class="deck-guide-link" href="'+pdfLink+'" target="_blank" rel="noopener noreferrer">📄 Apri piano nave MSC ↗</a></div>';
  }
+ }else if(shipTab==="consigli"){
+  var general=onboardDirectory().general;
+  out+='<h2>💡 Consigli utili a bordo</h2><p class="small">Bevande incluse, ristoranti e come evitare spese inutili.</p>';
+  general.forEach(function(item){out+='<details class="card shipdetail"><summary>'+esc(item[0])+'</summary><div style="padding:13px 16px"><p>'+esc(item[1])+'</p>'+(item[2]?'<a href="'+esc(item[2])+'" target="_blank" rel="noopener noreferrer">Fonte ufficiale MSC ↗</a>':'')+'</div></details>'});
+  if(!general.length)out+='<p class="card">Le informazioni sono in caricamento. Ricarica gli aggiornamenti dalla chat.</p>';
+ }else if(shipTab==="percorsi"){
+  var es=onboardDirectory().experiences,route=onboardExperience(onboardExperienceId);
+  if(route){out+='<button class="btn secondary deck-back" id="backFromExperience">← Tutti i percorsi</button>'+onboardExperienceDetails(route)}
+  else{
+   out+='<h2>✨ Da fare sulla nave</h2><p class="small">Percorsi suggeriti per quando avete tempo libero. Non sono appuntamenti prenotati.</p>';
+   es.forEach(function(x){out+='<button class="stop-card" data-open-experience="'+esc(x.id)+'"><div class="row"><strong>'+esc(x.title)+'</strong><span class="stop-pill">Apri ›</span></div><p>'+esc(x.summary)+'</p><span class="small">'+esc(x.duration)+'</span></button>'});
+   if(!es.length)out+='<div class="card">Percorsi in caricamento. Controlla la connessione e aggiorna le informazioni.</div>';
+  }
  }else if(shipTab!=="locali"){
  var tips=chatUpdates.filter(function(u){return shipGuideMatch(u,shipTab)}).sort(function(a,b){return shipGuideSort(a,b,shipTab)});
  var intro={
@@ -453,11 +524,15 @@ function render(){
  if(ref("offlineExport"))ref("offlineExport").onclick=exportOfflineFile;
  ref("page").querySelectorAll("[data-filter]").forEach(function(b){b.onclick=function(){filter=b.dataset.filter;render()}});
  ref("page").querySelectorAll("[data-chat-filter]").forEach(function(b){b.onclick=function(){chatFilter=b.dataset.chatFilter;render()}});
- ref("page").querySelectorAll("[data-ship-tab]").forEach(function(b){b.onclick=function(){shipTab=b.dataset.shipTab;shipMapDeck="";render()}});
- ref("page").querySelectorAll("[data-map-deck]").forEach(function(b){b.onclick=function(){shipMapDeck=b.dataset.mapDeck;render();window.scrollTo(0,0)}});
+ ref("page").querySelectorAll("[data-ship-tab]").forEach(function(b){b.onclick=function(){shipTab=b.dataset.shipTab;shipMapDeck="";onboardPlaceId="";onboardExperienceId="";render()}});
+ ref("page").querySelectorAll("[data-open-place]").forEach(function(b){b.onclick=function(){onboardPlaceOrigin=shipTab==="percorsi"?"percorsi":shipTab==="locali"?"locali":"mappa";onboardPlaceId=b.dataset.openPlace;shipTab="mappa";render();window.scrollTo(0,0)}});
+ if(ref("backFromPlace"))ref("backFromPlace").onclick=function(){onboardPlaceId="";if(onboardPlaceOrigin==="percorsi")shipTab="percorsi";else if(onboardPlaceOrigin==="locali")shipTab="locali";render();window.scrollTo(0,0)};
+ ref("page").querySelectorAll("[data-open-experience]").forEach(function(b){b.onclick=function(){onboardExperienceId=b.dataset.openExperience;render();window.scrollTo(0,0)}});
+ if(ref("backFromExperience"))ref("backFromExperience").onclick=function(){onboardExperienceId="";render();window.scrollTo(0,0)};
+ ref("page").querySelectorAll("[data-map-deck]").forEach(function(b){b.onclick=function(){shipMapDeck=b.dataset.mapDeck;onboardPlaceId="";render();window.scrollTo(0,0)}});
 
- if(ref("clearMapDeck"))ref("clearMapDeck").onclick=function(){shipMapDeck="";render();window.scrollTo(0,0)};
- var mapQ=ref("shipMapSearch");if(mapQ){mapQ.oninput=function(){var q=mapQ.value.trim().toLowerCase();ref("shipMapResults").querySelectorAll("[data-map-deck]").forEach(function(el){el.style.display=el.textContent.toLowerCase().includes(q)?"":"none"})}};
+ if(ref("clearMapDeck"))ref("clearMapDeck").onclick=function(){shipMapDeck="";onboardPlaceId="";render();window.scrollTo(0,0)};
+ var mapQ=ref("shipMapSearch");if(mapQ){mapQ.oninput=function(){var q=mapQ.value.trim().toLowerCase();ref("shipMapResults").querySelectorAll("[data-map-deck],[data-open-place]").forEach(function(el){el.style.display=el.textContent.toLowerCase().includes(q)?"":"none"})}};
  if(ref("refreshShipTips"))ref("refreshShipTips").onclick=function(){loadChatUpdates()};
  if(ref("refreshChat"))ref("refreshChat").onclick=function(){loadChatUpdates()};
  var search=ref("searchVenues");if(search){search.oninput=function(){term=search.value;var pos=search.selectionStart;render();ref("searchVenues").focus();ref("searchVenues").setSelectionRange(pos,pos)}} 
