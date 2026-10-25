@@ -130,10 +130,15 @@ function offlineDirectory(){
  return out;
 }
 function offlineHours(v){
- var result='<div class="card"><h3>'+esc(v.name)+'</h3><p class="small">Ponte '+esc(v.deck)+' · ORARI INDICATIVI, DA VERIFICARE A BORDO</p>';
- (v.schedule||[]).forEach(function(p){result+='<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)"><span>'+esc(p[0])+'</span><strong>'+esc(p[1])+'</strong></div>'});
- if(v.note)result+='<p class="small">'+esc(v.note)+'</p>';
- result+='</div>';return result;
+ var confirmed=v.confirmed||{};
+ var out='<div class="card"><h3>'+esc(v.name)+'</h3><p class="small">Ponte '+esc(v.deck)+' · ✅ = confermato a bordo il giorno indicato; altri orari indicativi.</p>';
+ (v.schedule||[]).forEach(function(p){
+  var proof=confirmed[p[0]];
+  out+='<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)"><span>'+esc(p[0])+'</span><strong>'+esc(p[1])+'</strong></div>';
+  out+='<div class="small" style="color:'+(proof?'#14745d':'#8b631f')+'">'+(proof?'✓ Confermato da cartello '+esc(proof.date||""):'Indicativo, da verificare')+'</div>';
+ });
+ if(v.note)out+='<p class="small">'+esc(v.note)+'</p>';
+ out+='</div>';return out;
 }
 function venueFor(id){return offlineDirectory().venues.find(function(v){return v.id===id})}
 function offlineCabin(){return (DATA.updates||[]).find(function(v){return v.slug==="cabina-msc-world-europa-2026"})}
@@ -209,7 +214,7 @@ function render(){
    out+='<h2>Esperienze a bordo</h2>';guide.experiences.forEach(function(x){out+='<button class="linkcard" data-trip="'+esc(x.id)+'"><strong>'+esc(x.title)+'</strong><p>'+esc(x.summary)+'</p><span class="small">'+esc(x.duration)+' · Apri ›</span></button>'});
   }
  }else if(ship==="orari"){
-  out+='<h2>Orari pasti a bordo</h2><div class="notice"><strong>Non confermati per questa crociera:</strong> consulta MSC for Me e la Cruise Card per gli orari reali.</div>';
+  out+='<h2>Orari pasti a bordo</h2><div class="notice">✅ Orari confermati da cartelli a bordo nella data indicata. Tutti gli altri sono indicativi e da verificare all’ingresso; per il turno cena fa fede la Cruise Card.</div>';
   guide.hoursGeneral.forEach(function(x){out+='<details class="card guide"><summary>'+esc(x[0])+'</summary><div class="content">'+esc(x[1])+'</div></details>'});
   guide.hours.forEach(function(x){out+=offlineHours(x)});
  }else if(ship==="consigli"){
