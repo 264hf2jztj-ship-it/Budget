@@ -71,7 +71,7 @@ input[type=search]{width:100%;font:inherit;padding:12px;border:1px solid #c8dbe4
 (function(){
 "use strict";
 var DATA=/*__CRUISE_SNAPSHOT__*/null;
-var page="tappe",chosen="",ship="mappa",checked=(DATA&&DATA.checked||[]).slice(),routeChoice={},deck="",place="",trip="",placeSource="mappa";
+var page="tappe",chosen="",ship="mappa",checked=(DATA&&DATA.checked||[]).slice(),routeChoice={},deck="",place="",trip="",placeSource="mappa",kidsDay="",kidsFilter="mini";
 var search="";
 var root=document.getElementById("main");
 function esc(v){return String(v==null?"":v).replace(/[&<>"']/g,function(x){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&quot;"}[x]})}
@@ -117,16 +117,34 @@ function noteDetails(u){
  }).join("");
 }
 function offlineDirectory(){
- var out={venues:[],general:[],experiences:[],hours:[],hoursGeneral:[]};
+ var out={venues:[],general:[],experiences:[],hours:[],hoursGeneral:[],kidsSchedules:[]};
  (DATA.updates||[]).filter(function(x){return /^onboard-dir-/.test(x.slug||"")}).forEach(function(row){
   try{
    var item=JSON.parse(row.body);if(!item||item.v!==1)return;
    if(item.type==="policies")out.general=out.general.concat(item.general||[]);
    if(item.type==="venues")out.venues=out.venues.concat((item.items||[]).map(function(v){return {id:v[0],name:v[1],deck:v[2],price:v[3],short:v[4]}}));
    if(item.type==="experiences")out.experiences=out.experiences.concat(item.items||[]);
+   if(item.type==="kidsSchedule")out.kidsSchedules.push(item);
    if(item.type==="hours"){out.hours=out.hours.concat(item.items||[]);out.hoursGeneral=out.hoursGeneral.concat(item.general||[])}
   }catch(e){}
  });
+ return out;
+}
+function offlineKidsProgram(){
+ var days=offlineDirectory().kidsSchedules.sort(function(a,b){return a.date.localeCompare(b.date)});
+ if(!days.length)return '<div class="card">Programma Doremiland non incluso in questa copia: esporta di nuovo.</div>';
+ var day=days.find(function(x){return x.date===(kidsDay||"2026-10-25")})||days[0];
+ var out='<div class="notice">Fotografia ufficiale Kids Clubs 25–27 ottobre. Mini Club: 3–6 anni. Gli eventi sono per gruppi 0–17 anni: chiedi conferma prima di partecipare.</div>';
+ out+='<div class="actions">'+days.map(function(x){return '<button data-kids-date="'+esc(x.date)+'" class="'+(day.date===x.date?'on':'')+'">'+esc(x.city)+' '+esc(x.date.slice(8))+'/10</button>'}).join("")+'</div>';
+ out+='<div class="card"><h3>🏠 Open House con i genitori</h3><strong>'+esc(day.openHouse.join('  ·  '))+'</strong><p class="small">Doremiland, ponte 19 · Per giocare insieme in famiglia; non garantisce custodia bambini. Tema: '+esc(day.theme)+'</p></div>';
+ out+='<div class="actions"><button data-kids-filter="mini" class="'+(kidsFilter==='mini'?'on':'')+'">Proposte 3–6</button><button data-kids-filter="all" class="'+(kidsFilter==='all'?'on':'')+'">Tutte le età</button></div>';
+ var visible=(day.events||[]).filter(function(e){return kidsFilter==="all"||e[4]==="mini?"});
+ out+='<div class="card">';
+ visible.forEach(function(e){
+  var age=e[4]==="junior"?"Solo Junior 7–11":e[4]==="young"?"Young Club 12–14":e[4]==="mini?"?"Da confermare con Mini Club 3–6":"Verificare con lo staff";
+  out+='<div class="row" style="border-bottom:1px solid var(--line);padding:12px 0;gap:12px;align-items:start"><strong style="color:#0b5b80">'+esc(e[0])+'</strong><div style="flex:1"><strong>'+esc(e[1])+'</strong><div class="small">'+esc(e[2])+' · Ponte '+esc(e[3])+'</div><div class="small">'+esc(age)+'</div></div></div>';
+ });
+ out+='</div><p class="notice">Fun Time Lunch 12:00 e Fun Time Dinner 19:30 sono eventi dei Kids Clubs, non gli orari generali della ristorazione. Chiedi ai responsabili età ammessa e modalità di iscrizione.</p>';
  return out;
 }
 function offlineHours(v){
@@ -177,6 +195,8 @@ function render(){
    var u=primary(p[0]),count=(DATA.updates||[]).filter(function(x){return x.port_date===p[0]&&!isTimeline(x)}).length;
    out+='<button class="linkcard" data-open="'+esc(p[0])+'"><div class="row"><strong>'+esc(p[1])+' · '+esc(p[2])+'</strong><span class="small">'+esc(p[3])+' → '+esc(p[4])+'</span></div><p>'+esc(p[5])+'</p><div class="row"><span class="small">'+(u?"Itinerario dettagliato disponibile":count+" note del giorno")+'</span><span class="pill">Apri dettagli ›</span></div></button>';
   });
+  var daysKids=offlineDirectory().kidsSchedules;
+  if(daysKids.length)out+='<button class="linkcard" data-kids-tappe="2026-10-25"><strong>🧒 Programma Mini Club · Genova, Napoli, Messina</strong><p>Open House e attività per bambini, con orari e ponti.</p><span class="small">Apri programma ›</span></button>';
   var experiences=offlineDirectory().experiences;
   if(experiences.length){
    out+='<h2>✨ Esperienze sulla nave</h2><p class="small">Percorsi facoltativi e flessibili anche senza Internet.</p>';
@@ -220,6 +240,7 @@ function render(){
  }else if(ship==="consigli"){
   out+='<h2>Consigli utili</h2>';guide.general.forEach(function(x){out+='<details class="card guide"><summary>'+esc(x[0])+'</summary><div class="content">'+esc(x[1])+'</div></details>'});
  }else{
+  if(ship==="bambini")out+=offlineKidsProgram();
   var set=(DATA.updates||[]).filter(function(u){return shipKind(u,ship)}),q=search.trim().toLowerCase();
   out+='<p class="small">'+set.length+' approfondimenti disponibili.</p><input id="q" type="search" placeholder="Cerca nei consigli..." value="'+esc(search)+'">';
   set.filter(function(u){return !q||(u.title+" "+u.body).toLowerCase().includes(q)}).forEach(function(u){out+='<details class="card guide"><summary>'+esc(u.title)+'</summary><div class="content">'+esc(u.body)+'</div></details>'});
@@ -247,6 +268,9 @@ function render(){
  root.querySelectorAll("[data-place]").forEach(function(b){b.onclick=function(){placeSource=ship==="percorsi"?"percorsi":"mappa";place=b.dataset.place;ship="mappa";render();window.scrollTo(0,0)}});
  root.querySelectorAll("[data-trip]").forEach(function(b){b.onclick=function(){trip=b.dataset.trip;render();window.scrollTo(0,0)}});
  root.querySelectorAll("[data-trip-from-tappe]").forEach(function(b){b.onclick=function(){trip=b.dataset.tripFromTappe;ship="percorsi";page="nave";render();window.scrollTo(0,0)}});
+ root.querySelectorAll("[data-kids-tappe]").forEach(function(b){b.onclick=function(){kidsDay=b.dataset.kidsTappe;ship="bambini";page="nave";render();window.scrollTo(0,0)}});
+ root.querySelectorAll("[data-kids-date]").forEach(function(b){b.onclick=function(){kidsDay=b.dataset.kidsDate;render()}});
+ root.querySelectorAll("[data-kids-filter]").forEach(function(b){b.onclick=function(){kidsFilter=b.dataset.kidsFilter;render()}});
  var backPlace=document.getElementById("backPlace");if(backPlace)backPlace.onclick=function(){place="";if(placeSource==="percorsi")ship="percorsi";render();window.scrollTo(0,0)};
  var backDeck=document.getElementById("backDeck");if(backDeck)backDeck.onclick=function(){deck="";render();window.scrollTo(0,0)};
  var backTrip=document.getElementById("backTrip");if(backTrip)backTrip.onclick=function(){trip="";render();window.scrollTo(0,0)};
