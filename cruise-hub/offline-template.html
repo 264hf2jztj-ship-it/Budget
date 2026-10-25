@@ -45,6 +45,16 @@ input[type=search]{width:100%;font:inherit;padding:12px;border:1px solid #c8dbe4
 .tl-choices button{background:white;border:1px solid #cadde5;border-radius:22px;padding:9px 12px;font-size:13px;color:#31556b;font-weight:750}
 .tl-choices button.on{background:#0b6386;color:white;border-color:#0b6386}
 @media(max-width:390px){.tl-row{grid-template-columns:65px minmax(0,1fr);gap:7px}.tl-row:not(:last-child)::before{left:68px}}
+.deckbutton{width:100%;text-align:left;border:0;background:#fff;padding:13px 7px;border-bottom:1px solid var(--line);color:var(--ink)}
+.deckbutton strong{font-size:15px}.deckbutton:last-child{border-bottom:0}
+.placeinfo{line-height:1.55}.callout{background:#e9f5f8;border-radius:11px;padding:14px;margin:12px 0}
+.route-step{display:grid;grid-template-columns:86px 1fr;gap:10px;position:relative;margin-bottom:15px}
+.route-step:not(:last-child)::before{content:"";position:absolute;left:92px;top:25px;bottom:-12px;border-left:2px solid #bed8df}
+.route-step .time{font-size:12px;color:#0c6586;font-weight:750;overflow-wrap:anywhere}
+.route-step .info{border:1px solid var(--line);border-radius:13px;padding:12px;background:#fff}
+.route-step .info p{margin:7px 0;font-size:13px}
+.route-step .info strong{font-size:15px}
+@media(max-width:390px){.route-step{grid-template-columns:64px 1fr;gap:9px}.route-step:not(:last-child)::before{left:69px}}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -61,7 +71,7 @@ input[type=search]{width:100%;font:inherit;padding:12px;border:1px solid #c8dbe4
 (function(){
 "use strict";
 var DATA=/*__CRUISE_SNAPSHOT__*/null;
-var page="tappe",chosen="",ship="piscine",checked=(DATA&&DATA.checked||[]).slice(),routeChoice={};
+var page="tappe",chosen="",ship="mappa",checked=(DATA&&DATA.checked||[]).slice(),routeChoice={},deck="",place="",trip="",placeSource="mappa";
 var search="";
 var root=document.getElementById("main");
 function esc(v){return String(v==null?"":v).replace(/[&<>"']/g,function(x){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&quot;"}[x]})}
@@ -106,6 +116,34 @@ function noteDetails(u){
  return '<details class="card guide"'+(i===0?' open':'')+'><summary>'+esc(label)+'</summary><div class="content">'+esc(t)+'</div></details>'
  }).join("");
 }
+function offlineDirectory(){
+ var out={venues:[],general:[],experiences:[]};
+ (DATA.updates||[]).filter(function(x){return /^onboard-dir-/.test(x.slug||"")}).forEach(function(row){
+  try{
+   var item=JSON.parse(row.body);if(!item||item.v!==1)return;
+   if(item.type==="policies")out.general=out.general.concat(item.general||[]);
+   if(item.type==="venues")out.venues=out.venues.concat((item.items||[]).map(function(v){return {id:v[0],name:v[1],deck:v[2],price:v[3],short:v[4]}}));
+   if(item.type==="experiences")out.experiences=out.experiences.concat(item.items||[]);
+  }catch(e){}
+ });
+ return out;
+}
+function venueFor(id){return offlineDirectory().venues.find(function(v){return v.id===id})}
+function offlineCabin(){return (DATA.updates||[]).find(function(v){return v.slug==="cabina-msc-world-europa-2026"})}
+function locationCard(v){
+ if(!v)return '<div class="card">Luogo non trovato nella guida offline.</div>';
+ var out='<div class="card"><div class="row"><h2>'+esc(v.name)+'</h2><span class="pill">Ponte '+esc(v.deck)+'</span></div><p class="small">'+esc(v.price)+'</p><p>'+esc(v.short)+'</p></div>';
+ if(v.id==="cabine"&&offlineCabin())out+='<div class="card"><h3>La vostra cabina</h3><p>'+esc(offlineCabin().body)+'</p></div>';
+ if(v.id==="pescaderia")out+='<div class="callout">Consiglio: chiedi il cuoppo al Grab & Go per gustarlo durante la passeggiata sulla World Promenade. Servizio extra.</div>';
+ out+='<div class="notice">Per orari e prezzi effettivi consulta MSC for Me. I link esterni richiedono una connessione.</div>';
+ return out;
+}
+function experienceCard(x){
+ var out='<div class="card"><h2>'+esc(x.title)+'</h2><p>'+esc(x.summary)+'</p><div class="small">'+esc(x.duration)+'</div></div>';
+ (x.steps||[]).forEach(function(step){out+='<div class="route-step"><div class="time">'+esc(step[0])+'</div><div class="info"><strong>'+esc(step[1])+'</strong><p>'+esc(step[2])+'</p>'+(venueFor(step[3])?'<button class="btn" data-place="'+esc(step[3])+'">Scheda del luogo ›</button>':'')+'</div></div>'});
+ if(x.warning)out+='<div class="notice">'+esc(x.warning)+'</div>';
+ return out;
+}
 function shipKind(u,k){
  var slug=String(u.slug||"");
  if(k==="piscine")return u.category==="attivita"&&/piscine|aquapark/.test(slug);
@@ -126,6 +164,11 @@ function render(){
    var u=primary(p[0]),count=(DATA.updates||[]).filter(function(x){return x.port_date===p[0]&&!isTimeline(x)}).length;
    out+='<button class="linkcard" data-open="'+esc(p[0])+'"><div class="row"><strong>'+esc(p[1])+' · '+esc(p[2])+'</strong><span class="small">'+esc(p[3])+' → '+esc(p[4])+'</span></div><p>'+esc(p[5])+'</p><div class="row"><span class="small">'+(u?"Itinerario dettagliato disponibile":count+" note del giorno")+'</span><span class="pill">Apri dettagli ›</span></div></button>';
   });
+  var experiences=offlineDirectory().experiences;
+  if(experiences.length){
+   out+='<h2>✨ Esperienze sulla nave</h2><p class="small">Percorsi facoltativi e flessibili anche senza Internet.</p>';
+   experiences.forEach(function(x){out+='<button class="linkcard" data-trip-from-tappe="'+esc(x.id)+'"><strong>'+esc(x.title)+'</strong><p>'+esc(x.summary)+'</p><span class="small">'+esc(x.duration)+' · Apri percorso ›</span></button>'});
+  }
  }else if(page==="detail"){
   var p=(DATA.ports||[]).find(function(x){return x[0]===chosen});
   if(!p){page="tappe";render();return}
@@ -137,11 +180,34 @@ function render(){
   var others=(DATA.updates||[]).filter(function(x){return x.port_date===chosen&&x!==u&&!isTimeline(x)});
   if(others.length){out+='<details class="card guide"><summary>Altri consigli del giorno ('+others.length+')</summary><div class="content">'+others.map(function(x){return '<details class="card guide"><summary>'+esc(x.title)+'</summary><div class="content">'+esc(x.body)+'</div></details>'}).join('')+'</div></details>'}
  }else if(page==="nave"){
-  out='<h2>Attività a bordo</h2><div class="actions">'+[["piscine","Piscine"],["sport","Sport"],["spettacoli","Spettacoli"],["bambini","Bambini"],["ristorazione","Ristorazione"]].map(function(p){return '<button data-ship="'+p[0]+'" class="'+(ship===p[0]?"on":"")+'">'+p[1]+'</button>'}).join("")+'</div>';
+  var guide=offlineDirectory();
+  out='<h2>A bordo</h2><div class="actions">'+[["mappa","🧭 Mappa"],["percorsi","✨ Percorsi"],["consigli","💡 Consigli"],["piscine","Piscine"],["sport","Sport"],["spettacoli","Spettacoli"],["bambini","Bambini"],["ristorazione","Ristorazione"]].map(function(p){return '<button data-ship="'+p[0]+'" class="'+(ship===p[0]?"on":"")+'">'+p[1]+'</button>'}).join("")+'</div>';
+ if(ship==="mappa"){
+  if(place){
+   out+='<button class="btn" id="backPlace">← '+(placeSource==="percorsi"?"Ritorna al percorso":"Ritorna al ponte")+'</button>'+locationCard(venueFor(place));
+  }else if(deck){
+   var dest=guide.venues.filter(function(v){return v.deck.split(/[^0-9]+/).includes(deck)});
+   out+='<button class="btn" id="backDeck">← Tutti i ponti</button><h2>Ponte '+esc(deck)+'</h2><div class="card"><h3>Luoghi su questo ponte</h3>'+dest.map(function(v){return '<button class="deckbutton" data-place="'+esc(v.id)+'"><strong>'+esc(v.name)+'</strong><span style="float:right">Info ›</span></button>'}).join('')+'</div>';
+  }else{
+   out+='<p class="small">Apri un ponte, poi tocca il luogo per i consigli.</p>';
+   var decks=["5","6","7","8","10","18","19","20"];
+   decks.forEach(function(n){var count=guide.venues.filter(function(v){return v.deck.split(/[^0-9]+/).includes(n)}).length;out+='<button class="linkcard" data-deck="'+n+'"><div class="row"><strong>Ponte '+n+'</strong><span class="pill">Esplora ›</span></div><p class="small">'+count+' luoghi in guida</p></button>'});
+  }
+ }else if(ship==="percorsi"){
+  if(trip){
+   var current=guide.experiences.find(function(x){return x.id===trip});
+   out+='<button class="btn" id="backTrip">← Tutti i percorsi</button>'+(current?experienceCard(current):'<div class="card">Percorso non trovato.</div>');
+  }else{
+   out+='<h2>Esperienze a bordo</h2>';guide.experiences.forEach(function(x){out+='<button class="linkcard" data-trip="'+esc(x.id)+'"><strong>'+esc(x.title)+'</strong><p>'+esc(x.summary)+'</p><span class="small">'+esc(x.duration)+' · Apri ›</span></button>'});
+  }
+ }else if(ship==="consigli"){
+  out+='<h2>Consigli utili</h2>';guide.general.forEach(function(x){out+='<details class="card guide"><summary>'+esc(x[0])+'</summary><div class="content">'+esc(x[1])+'</div></details>'});
+ }else{
   var set=(DATA.updates||[]).filter(function(u){return shipKind(u,ship)}),q=search.trim().toLowerCase();
-  out+='<p class="small">'+set.length+' schede disponibili: espandile solo quando ti servono.</p><input id="q" type="search" placeholder="Cerca nei consigli..." value="'+esc(search)+'">';
+  out+='<p class="small">'+set.length+' approfondimenti disponibili.</p><input id="q" type="search" placeholder="Cerca nei consigli..." value="'+esc(search)+'">';
   set.filter(function(u){return !q||(u.title+" "+u.body).toLowerCase().includes(q)}).forEach(function(u){out+='<details class="card guide"><summary>'+esc(u.title)+'</summary><div class="content">'+esc(u.body)+'</div></details>'});
-  if(ship==="ristorazione"){out+='<h3>Ristoranti e bar</h3>';(DATA.venues||[]).forEach(function(v){out+='<div class="card"><strong>'+esc(v[0])+'</strong><div class="small">Ponte '+esc(v[1])+' · '+esc(v[3])+'</div><p>'+esc(v[4])+'</p></div>'})}
+  if(ship==="ristorazione"){out+='<h3>Ristoranti e bar</h3>';guide.venues.filter(function(v){return /Buffet|Bar|Ristorante|Coffee|Pescaderia|Tacos|Gelat|Pub|caffetteria|Caffetteria/i.test(v.name+" "+v.short)}).forEach(function(v){out+='<button class="linkcard" data-place="'+esc(v.id)+'"><strong>'+esc(v.name)+'</strong><p class="small">Ponte '+esc(v.deck)+' · '+esc(v.price)+'</p><p>'+esc(v.short)+'</p></button>'})}
+ }
  }else if(page==="checklist"){
   out='<h2>Checklist</h2><div class="notice">Le spunte in questo file non si sincronizzano con il Cruise Hub online. Il file contiene lo stato al momento dell’esportazione.</div>';
   ["pre","board","food","ports"].forEach(function(k){
@@ -159,7 +225,14 @@ function render(){
  root.querySelectorAll("[data-open]").forEach(function(b){b.onclick=function(){chosen=b.dataset.open;page="detail";render();window.scrollTo(0,0)}});
  root.querySelectorAll("[data-back]").forEach(function(b){b.onclick=function(){page="tappe";render();window.scrollTo(0,0)}});
  root.querySelectorAll("[data-route]").forEach(function(b){b.onclick=function(){routeChoice[chosen]=b.dataset.route;render()}});
- root.querySelectorAll("[data-ship]").forEach(function(b){b.onclick=function(){ship=b.dataset.ship;search="";render()}});
+ root.querySelectorAll("[data-ship]").forEach(function(b){b.onclick=function(){ship=b.dataset.ship;search="";deck="";place="";trip="";render()}});
+ root.querySelectorAll("[data-deck]").forEach(function(b){b.onclick=function(){deck=b.dataset.deck;place="";render();window.scrollTo(0,0)}});
+ root.querySelectorAll("[data-place]").forEach(function(b){b.onclick=function(){placeSource=ship==="percorsi"?"percorsi":"mappa";place=b.dataset.place;ship="mappa";render();window.scrollTo(0,0)}});
+ root.querySelectorAll("[data-trip]").forEach(function(b){b.onclick=function(){trip=b.dataset.trip;render();window.scrollTo(0,0)}});
+ root.querySelectorAll("[data-trip-from-tappe]").forEach(function(b){b.onclick=function(){trip=b.dataset.tripFromTappe;ship="percorsi";page="nave";render();window.scrollTo(0,0)}});
+ var backPlace=document.getElementById("backPlace");if(backPlace)backPlace.onclick=function(){place="";if(placeSource==="percorsi")ship="percorsi";render();window.scrollTo(0,0)};
+ var backDeck=document.getElementById("backDeck");if(backDeck)backDeck.onclick=function(){deck="";render();window.scrollTo(0,0)};
+ var backTrip=document.getElementById("backTrip");if(backTrip)backTrip.onclick=function(){trip="";render();window.scrollTo(0,0)};
  root.querySelectorAll("[data-check]").forEach(function(x){x.onchange=function(){checked=x.checked?checked.concat([x.dataset.check]):checked.filter(function(k){return k!==x.dataset.check})}});
  var qbox=document.getElementById("q");if(qbox){qbox.onchange=function(){search=qbox.value;render()};qbox.onkeydown=function(e){if(e.key==="Enter"){search=qbox.value;render()}}}
 }
