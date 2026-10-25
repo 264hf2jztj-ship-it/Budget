@@ -13,6 +13,29 @@
 .stop-sub{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}
 .stop-pill{font-size:11px;border-radius:18px;padding:5px 9px;color:#0b6a6b;background:#e7f7f5;font-weight:700}
 .stop-detail-top{display:flex;gap:10px;align-items:center;margin:8px 0 16px}
+.timeline{margin:16px 0 10px}
+.timeline-line{display:grid;grid-template-columns:80px minmax(0,1fr);gap:12px;position:relative;padding-bottom:18px}
+.timeline-line:not(:last-child)::before{content:"";position:absolute;left:84px;top:20px;bottom:0;border-left:2px solid #c5dce3}
+.timeline-time{font-weight:750;font-size:12px;line-height:1.35;color:#0c6486;padding-top:3px;overflow-wrap:anywhere}
+.timeline-info{padding-left:13px;position:relative;min-width:0}
+.timeline-info::before{content:"";position:absolute;left:-3px;top:6px;width:10px;height:10px;border-radius:50%;background:#0d849e;border:2px solid white;box-shadow:0 0 0 2px #b6d9de}
+.timeline-item{background:white;border:1px solid var(--line);border-radius:13px;padding:12px 13px;box-shadow:0 3px 12px #102b3c08}
+.timeline-item h3{font-size:15px;line-height:1.32;margin:0 0 5px}
+.timeline-item p{font-size:13px;line-height:1.45;margin:0 0 7px}
+.timeline-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.timeline-action{background:#eaf5f8;text-decoration:none;color:#075878;font-size:12px;font-weight:680;border:1px solid #cae5ed;border-radius:9px;padding:8px 10px;line-height:1.3;display:inline-flex;align-items:center}
+.timeline-action.book{color:#fff;background:#0b6689;border-color:#0b6689}
+.timeline-info details{margin-top:7px;border-top:1px solid #e5edef;padding-top:7px}
+.timeline-info summary{font-size:12px;font-weight:650;color:#0e6887;cursor:pointer}
+.timeline-detail{font-size:13px;line-height:1.55;padding:7px 0 0;white-space:pre-wrap}
+.timeline-return .timeline-item{background:#eaf7f3;border-color:#b8dbcf}
+.timeline-return .timeline-info::before{background:#308967}
+.timeline-choices{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}
+.timeline-choices button{border:1px solid #c3d9e1;border-radius:22px;padding:10px 13px;background:#fff;color:#24556a;font-size:13px;font-weight:700}
+.timeline-choices button.selected{background:#0b6385;color:white;border-color:#0b6385}
+.timeline-warning{font-size:12px;line-height:1.5;background:#fff8e8;border-left:3px solid #c1963c;border-radius:9px;padding:12px 13px;margin:12px 0}
+.timeline-source{margin-top:18px}
+@media(max-width:390px){.timeline-line{grid-template-columns:69px minmax(0,1fr);gap:8px}.timeline-line:not(:last-child)::before{left:73px}.timeline-info{padding-left:11px}.timeline-item{padding:11px}}
 @media(min-width:640px){.columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}}</style></head><body>
 <div id="gate" class="auth"><div class="card"><div style="font-size:40px">🚢</div><h1>Cruise Hub</h1><p>La guida personale alla tua crociera, sincronizzata tra i tuoi dispositivi.</p><p class="small">Usa l’email <b>già associata a Cucina Hub</b>. Il Cruise Hub non crea nuovi account; dati e checklist rimangono privati.</p><form id="login"><label for="email">Indirizzo email</label><input type="email" id="email" autocomplete="email" placeholder="La tua email" required><button class="btn" type="submit">Invia link di accesso</button><hr><label for="password">Oppure accedi con la password di Cucina Hub</label><input id="password" type="password" autocomplete="current-password" placeholder="Password (se configurata)"><button class="btn secondary" id="passwordLogin" type="button">Accedi con password</button></form><p id="loginmsg" class="small" aria-live="polite"></p></div></div>
 <div id="app" class="hidden"><header class="header"><div class="row"><b style="letter-spacing:2px;font-size:12px">🚢 CRUISE HUB</b><button class="btn tiny secondary" id="settings">⚙ Gestisci</button></div><h1>MSC World Europa</h1><div class="small">25 ottobre – 1 novembre 2026 · 7 notti</div><div id="status">● Caricamento...</div></header><main class="wrap" id="page"></main><nav class="nav" id="nav" aria-label="Sezioni"><button data-page="oggi"><span>🏠</span>Oggi</button><button data-page="tappe"><span>🗺️</span>Tappe</button><button data-page="nave"><span>🚢</span>A bordo</button><button data-page="checklist"><span>✅</span>Checklist</button><button data-page="note"><span>📝</span>Note</button><button data-page="chat"><span>📥</span>Dalla chat</button></nav></div>
@@ -60,7 +83,7 @@ pre:["Documenti per tutti pronti","Carte d’imbarco salvate offline","Etichette
 board:["Seguire briefing sicurezza e verificare punto di riunione","Confermare turno cena e ristorante","Registrare la bambina al Mini Club (ponte 19)","Collegarsi al Wi-Fi della nave e aprire MSC for Me","Controllare spettacoli e attività","Visitare World Promenade e Botanic Garden Pool","Chiedere se MSC conserva il vino aperto tra le cene"],
 ports:["Verificare orario di rientro a bordo","Portare documenti e tessere necessarie","Controllare meteo e accessibilità col passeggino","Verificare telefono e mappe offline"]};
 function initState(){return {privateTrip:null,checked:["pre:0","pre:1","pre:2","pre:3","pre:4","pre:5"],liked:[],visited:[],notes:[],customTasks:[],customItems:[],selectedDate:"2026-10-25"}}
-var st=initState(),actor=null,db=null,revision=null,pending=false,conflict=false,busy=false,savingTimer=null,version=0,page="oggi",filter="all",term="",shipTab="mappa",selectedPort="",shipMapDeck="";
+var st=initState(),actor=null,db=null,revision=null,pending=false,conflict=false,busy=false,savingTimer=null,version=0,page="oggi",filter="all",term="",shipTab="mappa",selectedPort="",shipMapDeck="",portRouteChoice={};
 var chatUpdates=[],chatLoading=false,chatFeedError=null,chatSig="",chatFilter="all";
 var checklistItems=[],checklistLoading=false,checklistError=null,checklistSig="";
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]})}
@@ -181,7 +204,7 @@ async function loadChatUpdates(){
   if(sig!==chatSig||chatFeedError){
    chatUpdates=next;chatSig=sig;chatFeedError=null;
    try{localStorage.setItem(chatCacheKey(),JSON.stringify(chatUpdates))}catch(e){}
-   if(page==="chat"||page==="oggi"||page==="nave"||page==="tappe")render();
+   if(page==="chat"||page==="oggi"||page==="nave"||page==="tappe"||page==="dettaglio")render();
   }
  }catch(err){if(actor&&actor.id===id){chatFeedError=String(err&&err.message||err);if(page==="chat")render()}}
  finally{chatLoading=false}
@@ -221,10 +244,51 @@ async function loadChecklistItems(){
  }catch(e){if(actor&&actor.id===uid){checklistError=String(e&&e.message||e);if(page==="checklist")render()}}
  finally{checklistLoading=false}
 }
+function isTimelineUpdate(u){return /^timeline-20[0-9]{2}-[0-9]{2}-[0-9]{2}$/.test(String(u&&u.slug||""))}
+function visibleChatUpdates(){return chatUpdates.filter(function(u){return !isTimelineUpdate(u)})}
+function timelineForPort(date){
+ var u=chatUpdates.find(function(x){return x.slug==="timeline-"+date});
+ if(!u)return null;
+ try{
+  var data=JSON.parse(u.body);
+  if(data&&data.v===1&&Array.isArray(data.routes)&&data.routes.length)return data
+ }catch(err){}
+ return null;
+}
+function timelineLinkSafe(u){return typeof u==="string"&&/^https:\/\/[^\s"'<>]+$/i.test(u)}
+function timelineRender(date,timeline){
+ var routes=timeline.routes||[],chosen=routes.find(function(x){return x.id===portRouteChoice[date]})||routes[0];
+ if(!chosen)return '';
+ var out='<div class="card"><h3 style="margin:0 0 6px">Il programma in breve</h3><p style="margin:0;font-size:14px">'+esc(timeline.summary||"")+'</p></div>';
+ if(routes.length>1){
+  out+='<h3>Scegli il percorso</h3><div class="timeline-choices" role="group" aria-label="Alternativa per questa tappa">';
+  routes.forEach(function(r){out+='<button type="button" data-timeline-route="'+esc(r.id)+'" class="'+(r.id===chosen.id?"selected":"")+'" aria-pressed="'+(r.id===chosen.id?"true":"false")+'">'+esc(r.label)+'</button>'});
+  out+='</div>';
+  if(chosen.description)out+='<p class="small">'+esc(chosen.description)+'</p>';
+ }
+ out+='<div class="timeline">';
+ (chosen.steps||[]).forEach(function(step,i){
+  var flag=step.flag==="return";
+  out+='<div class="timeline-line'+(flag?' timeline-return':'')+'"><div class="timeline-time">'+esc(step.time||"")+'</div><div class="timeline-info"><article class="timeline-item">';
+  out+='<h3>'+esc(step.title||"")+'</h3><p>'+esc(step.short||"")+'</p>';
+  var links=(step.links||[]).filter(function(a){return a&&timelineLinkSafe(a.url)}),hasMap=typeof step.map==="string"&&step.map.trim();
+  if(links.length||hasMap){
+   out+='<div class="timeline-actions">';
+   links.forEach(function(a){out+='<a class="timeline-action'+(a.kind==="booking"?' book':'')+'" href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer">'+esc(a.label||"Sito")+' ↗</a>'});
+   if(hasMap)out+='<a class="timeline-action" href="https://www.google.com/maps/search/?api=1&amp;query='+encodeURIComponent(step.map)+'" target="_blank" rel="noopener noreferrer">📍 Mappa ↗</a>';
+   out+='</div>';
+  }
+  if(step.detail)out+='<details><summary>Info utili</summary><div class="timeline-detail">'+esc(step.detail)+'</div></details>';
+  out+='</article></div></div>';
+ });
+ out+='</div>';
+ if(timeline.warning)out+='<div class="timeline-warning"><strong>Da ricordare</strong><div>'+esc(timeline.warning)+'</div></div>';
+ return out;
+}
 function mainPortUpdate(date){
  return chatUpdates.find(function(u){return u.port_date===date&&u.category==="escursione"&&/^escursione-proposta-/.test(u.slug||"")})||null;
 }
-function portNotes(date,omit){return chatUpdates.filter(function(u){return u.port_date===date&&u!==omit})}
+function portNotes(date,omit){return chatUpdates.filter(function(u){return u.port_date===date&&u!==omit&&!isTimelineUpdate(u)})}
 function portSections(u){
  var body=String(u.body||""),parts=body.split(/\n\s*\n/).filter(function(s){return s.trim()});
  if(parts.length===1&&body.length>1000)parts=body.split(/\n(?=[A-ZÀ-Ù][A-ZÀ-Ù 0-9()\/\-]{4,65}:)/).filter(Boolean);
@@ -258,8 +322,8 @@ function render(){
  out+='<div class="columns"><div class="card"><h3>La tua preparazione</h3><div class="row"><strong>'+n+' / 7 attività</strong><span class="small">'+Math.round(n/7*100)+'%</span></div><div class="progress"><div style="width:'+Math.round(n/7*100)+'%"></div></div><button class="btn secondary" data-go="checklist">Apri checklist</button></div>';
  out+='<div class="card"><h3>Riferimenti</h3><p>'+esc(st.privateTrip&&st.privateTrip.cabin?"Cabina "+st.privateTrip.cabin+" · Ponte "+st.privateTrip.deck:(cabinUpdate()?cabinUpdate().title:"Cabina: consulta il biglietto"))+'</p><p>Check-in 25/10: <b>13:00–14:00</b><br>Partenza Genova: <b>16:00</b></p></div></div>';
  out+='<div class="card"><h3>Consigli rapidi</h3><p>🍺 Birra artigianale al Masters of the Sea<br>🍽️ Cena al ristorante assegnato<br>🧒 Mini Club ponte 19<br>🍷 Chiedi se una bottiglia aperta si può conservare per la cena seguente</p><p class="small">Senza pacchetto bevande: preferisci acquisti singoli e valuta una bottiglia di vino a cena.</p></div>';
- out+='<div class="card"><div class="row"><h3>📥 Dalla chat</h3><button class="btn tiny secondary" data-go="chat">Vedi tutto ('+chatUpdates.length+')</button></div><p class="small">Consigli nuovi aggiunti direttamente alla guida, senza importare file.</p>';
- if(chatUpdates.length){chatUpdates.slice(0,2).forEach(function(u){out+=chatCard(u,true)})}else{out+='<p class="small">Nessun aggiornamento ancora disponibile.</p>'}
+ out+='<div class="card"><div class="row"><h3>📥 Dalla chat</h3><button class="btn tiny secondary" data-go="chat">Vedi tutto ('+visibleChatUpdates().length+')</button></div><p class="small">Consigli nuovi aggiunti direttamente alla guida, senza importare file.</p>';
+ if(visibleChatUpdates().length){visibleChatUpdates().slice(0,2).forEach(function(u){out+=chatCard(u,true)})}else{out+='<p class="small">Nessun aggiornamento ancora disponibile.</p>'}
  out+='</div>';
  }else if(page==="tappe"){
  out='<h2>Le vostre tappe</h2><p class="small">Un riquadro per scalo: tocca la città per aprire una pagina dedicata con itinerario, soste e attività collegate.</p>';
@@ -272,12 +336,13 @@ function render(){
  }else if(page==="dettaglio"){
  var p=ports.find(function(x){return x[0]===selectedPort});
  if(!p){page="tappe";render();return}
- var u=mainPortUpdate(selectedPort),others=portNotes(selectedPort,u);
+ var u=mainPortUpdate(selectedPort),timeline=timelineForPort(selectedPort),others=portNotes(selectedPort,u);
  out='<div class="stop-detail-top"><button type="button" class="btn secondary" id="backToStops">← Tutte le tappe</button></div>';
- out+='<h2>'+esc(p[1])+' · '+esc(p[2])+'</h2><div class="card"><div class="row"><strong>Orari scalo</strong><span>'+esc(p[3])+' → '+esc(p[4])+'</span></div><p>'+esc(p[5])+'</p><p class="small">Per il rientro prevale sempre l’orario ufficiale di ultimo imbarco MSC.</p></div>';
- if(u){out+='<h3>Itinerario e soste</h3>'+portSections(u)}
- else{out+='<div class="card"><p>Giornata di imbarco, navigazione o sbarco. Consulta le attività qui sotto.</p></div>'}
- if(others.length){out+='<h3>Altre attività del giorno</h3>';others.forEach(function(x){out+='<details class="card shipdetail"><summary>'+esc(x.title)+'</summary><div class="chatbody" style="padding:16px">'+esc(x.body)+'</div></details>'})}
+ out+='<h2>'+esc(p[1])+' · '+esc(p[2])+'</h2><div class="card"><div class="row"><strong>Orari scalo</strong><span>'+esc(p[3])+' → '+esc(p[4])+'</span></div><p class="small" style="margin-bottom:0">Orari indicativi: fa fede l’ultimo imbarco comunicato da MSC.</p></div>';
+ if(timeline){out+=timelineRender(selectedPort,timeline)}
+ else{out+='<div class="card"><strong>Timeline in caricamento</strong><p class="small">Aggiorna i contenuti o consulta gli appunti originali qui sotto.</p><button class="btn tiny secondary" id="refreshPortTimeline">Aggiorna itinerario</button></div>'}
+ if(u){out+='<details class="card shipdetail timeline-source"><summary>Appunti completi e fonti</summary><div class="chatbody" style="padding:16px">'+esc(u.body)+'</div></details>'}
+ if(others.length){out+='<details class="card shipdetail timeline-source"><summary>Altri consigli del giorno ('+others.length+')</summary><div style="padding:12px 15px">'+others.map(function(x){return '<details class="shipdetail"><summary>'+esc(x.title)+'</summary><div class="chatbody" style="padding:12px">'+esc(x.body)+'</div></details>'}).join('')+'</div></details>'}
  out+='<div class="card"><button class="btn tiny secondary" id="addPortNote">Aggiungi una nota per questo scalo</button></div>';
  }else if(page==="nave"){
  out='<h2>Vita a bordo</h2><p class="small">Guida pratica della vostra settimana: apri un argomento per leggere tutti i dettagli salvati dalla chat.</p>';
@@ -346,10 +411,10 @@ function render(){
  out='<h2>Note personali</h2><div class="card"><label for="noteTitle">Titolo</label><input id="noteTitle" type="text" placeholder="Es. Vino, escursione, orario"><label for="noteText">Nota</label><textarea id="noteText" placeholder="Scrivi qui..."></textarea><button class="btn" id="addNote">Salva nota</button></div>';
  st.notes.slice().reverse().forEach(function(n){out+='<div class="card"><div class="row"><strong>'+esc(n.title||"Nota")+'</strong><button class="btn tiny ghost" data-delete="'+esc(n.id)+'">Elimina</button></div><p style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(n.body)+'</p><p class="small">'+esc(n.updated||"")+'</p></div>'})
   }else if(page==="chat"){
- out='<h2>📥 Dalla chat</h2><div class="card"><p>Qui trovi automaticamente i consigli che salviamo durante la conversazione. Sono separati dalle tue note, preferenze e checklist.</p><button class="btn tiny secondary" id="refreshChat">Controlla nuovi aggiornamenti</button> <span class="small">'+chatUpdates.length+' aggiornamenti</span></div>';
+ out='<h2>📥 Dalla chat</h2><div class="card"><p>Qui trovi automaticamente i consigli che salviamo durante la conversazione. Sono separati dalle tue note, preferenze e checklist.</p><button class="btn tiny secondary" id="refreshChat">Controlla nuovi aggiornamenti</button> <span class="small">'+visibleChatUpdates().length+' aggiornamenti</span></div>';
  if(chatFeedError)out+='<div class="notice danger">Impossibile controllare i nuovi contenuti: '+esc(chatFeedError)+'</div>';
  out+='<div class="filter">'+[["all","Tutti"],["logistica","Logistica"],["ristorazione","Ristoranti"],["attivita","Attività"],["escursione","Escursioni"],["promemoria","Promemoria"],["generale","Consigli"]].map(function(f){return '<button data-chat-filter="'+f[0]+'" class="'+(chatFilter===f[0]?"selected":"")+'">'+f[1]+'</button>'}).join("")+'</div>';
- var selected=chatUpdates.filter(function(u){return chatFilter==="all"||u.category===chatFilter});
+ var selected=visibleChatUpdates().filter(function(u){return chatFilter==="all"||u.category===chatFilter});
  if(!selected.length)out+='<div class="card"><p class="small">Nessun consiglio in questa categoria.</p></div>';
  selected.forEach(function(u){out+=chatCard(u,false)});
  }else if(page==="gestisci"){
@@ -361,6 +426,8 @@ function render(){
  ref("page").querySelectorAll("[data-go]").forEach(function(b){b.onclick=function(){tab(b.dataset.go)}});
  ref("page").querySelectorAll("[data-openport]").forEach(function(b){b.onclick=function(){openPort(b.dataset.openport)}});
  if(ref("backToStops"))ref("backToStops").onclick=function(){tab("tappe")};
+ if(ref("refreshPortTimeline"))ref("refreshPortTimeline").onclick=function(){loadChatUpdates()};
+ ref("page").querySelectorAll("[data-timeline-route]").forEach(function(b){b.onclick=function(){portRouteChoice[selectedPort]=b.dataset.timelineRoute;render()}});
  if(ref("addPortNote"))ref("addPortNote").onclick=function(){var date=selectedPort;page="note";render();ref("noteTitle").value="Escursione "+((ports.find(function(p){return p[0]===date})||[])[2]||"")};
  if(ref("offlineExport"))ref("offlineExport").onclick=exportOfflineFile;
  ref("page").querySelectorAll("[data-filter]").forEach(function(b){b.onclick=function(){filter=b.dataset.filter;render()}});
