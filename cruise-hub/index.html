@@ -202,6 +202,7 @@ function placeFromName(name){
  return vs.find(function(v){var n=v.name.toLocaleLowerCase("it").replace(/[^a-z0-9àèéìòù]+/g," ").trim();return n===needle||n.indexOf(needle)===0||needle.indexOf(n)===0})||null;
 }
 function onboardExperience(id){return onboardDirectory().experiences.find(function(x){return x.id===id})||null}
+var onboardSpecialTips={"pescaderia":"Chiedi al banco Grab & Go se oggi è disponibile il cuoppo da passeggio; è distinto dal ristorante Fish Market al tavolo.","promenade":"Ideale al tramonto o con bel tempo. La passeggiata all'aperto può essere ventosa.","galleria":"Alternativa al coperto alla Promenade, soprattutto in caso di vento o pioggia.","mercato":"Acqua, latte, tè, caffè e succhi standard dei dispenser sono inclusi; le bevande del bar e quelle in lattina possono essere extra.","brasserie":"Al buffet le bevande standard sono incluse; controlla che questa sala sia aperta nella fascia desiderata.","hola":"Cena informale da condividere; per Rosa verifica che i piatti siano non piccanti.","teppanyaki":"Cena con chef, rumori e fiammate: valuta il comfort di Rosa e la durata.","masters":"Da provare per la birra artigianale prodotta a bordo.","coffee":"Un espresso specialty a pagamento, differente dal caffè standard incluso al buffet.","elixir":"Cocktail elaborati: per un solo aperitivo non serve acquistare un pacchetto bevande.","sweet":"Gelati e crêpes sono acquisti extra, anche se i pasti al buffet sono inclusi.","choco":"Le creazioni di cioccolato meritano una visita anche senza acquistare.","dolce":"Sosta semplice per l'aperitivo prima della cena assegnata.","tv":"Cerca nel Daily Programme eventi, quiz e musica.","fizz":"Bar dedicato a Champagne e bollicine per un brindisi speciale.","gin":"Gin tonic e degustazioni: controlla le offerte e scegli una consumazione singola.","raj":"Tea house raccolta, utile per una sosta più tranquilla.","zest":"I succhi freschi e le centrifughe sono extra, distinti dai succhi standard al buffet.","malt":"Lounge dedicata a whisky e distillati; controlla le regole per eventuali aree fumatori.","rive":"Comodo dopo la piscina; consumazioni al bar normalmente extra.","botanic-bar":"Utile vicino alla piscina con copertura, ma le bevande del bar non sono automaticamente incluse.","surfers":"Vicino alle attività esterne; apertura influenzata dal meteo.","gym":"La palestra standard è inclusa, ma corsi specifici e personal trainer possono costare.","sportplex":"Gli sport sul campo sono organizzati per fasce orarie: controlla attività e attrezzature del giorno.","doremiland":"Registrazione iniziale; brevi sessioni facoltative per Rosa.","lego":"Attività e orari cambiano giornalmente; controlla nel Daily Programme.","theatre":"Scegli uno spettacolo compatibile con la durata della cena e la stanchezza di Rosa.","panorama":"Alternativa al teatro per una serata con musica; le consumazioni possono essere extra."};
 function onboardPlaceDetails(place,mine){
  var out='<div class="deck-header"><span>🚢 Guida ai locali</span><h3>'+esc(place.name)+'</h3><p>Ponte '+esc(place.deck)+' · '+esc(place.price)+'</p></div>';
  out+='<div class="card"><h3>Perché andarci</h3><p>'+esc(place.short)+'</p>';
@@ -209,13 +210,21 @@ function onboardPlaceDetails(place,mine){
  if(place.id==="pescaderia")out+='<p class="small">Consiglio: scegli il banco Grab & Go se vuoi solo il cuoppo; il ristorante al tavolo è un servizio separato.</p>';
  if(place.id==="mercato"||place.id==="brasserie")out+='<p class="small">Le bevande standard dei dispenser del buffet sono incluse, mentre quelle del bar non necessariamente.</p>';
  out+='</div>';
- out+='<div class="card"><h3>Informazioni utili</h3><div class="place-tip"><span>💡</span><div>'+esc(place.short)+'</div></div>';
+ out+='<div class="card"><h3>Informazioni utili</h3>';
+ if(onboardSpecialTips[place.id])out+='<div class="place-tip"><span>💡</span><div>'+esc(onboardSpecialTips[place.id])+'</div></div>';
+ out+='<div class="place-tip"><span>🧭</span><div>Ponte '+esc(place.deck)+'. La posizione esatta di corridoi e ascensori è indicata sulla planimetria MSC.</div></div>';
  out+='<div class="place-tip"><span>💳</span><div>Costo: '+esc(place.price)+'. Eventuali offerte, menu e servizi cambiano: verifica il listino a bordo.</div></div>';
  if(place.id==="pescaderia")out+='<div class="place-tip"><span>🐟</span><div>Cuoppo da asporto da gustare sulla World Promenade. Conferma disponibilità e prezzo.</div></div>';
  if(place.id==="zest")out+='<div class="place-tip"><span>🥤</span><div>I centrifugati freschi sono extra, distinti dai succhi ai dispenser dei buffet.</div></div>';
  if(place.id==="dolce"||place.id==="gin"||place.id==="fizz"||place.id==="elixir")out+='<div class="place-tip"><span>🍸</span><div>Puoi acquistare un solo cocktail senza sottoscrivere un pacchetto bevande.</div></div>';
  out+='</div>';
- out+='<div class="card"><h3>Approfondimenti</h3><p class="small">Per disponibilità, regole e orari fa fede il programma MSC. La mappa del ponte indica le destinazioni, non la posizione esatta dei corridoi.</p></div>';
+ var related=onboardDirectory().experiences.filter(function(x){return (x.steps||[]).some(function(step){return step[3]===place.id})}).slice(0,3);
+ if(related.length){
+  out+='<div class="card"><h3>Esperienze che includono questo luogo</h3>';
+  related.forEach(function(x){out+='<button type="button" class="place-button" data-related-route="'+esc(x.id)+'"><strong>'+esc(x.title)+'</strong><span class="stop-pill">Apri ›</span></button>'});
+  out+='</div>';
+ }
+ out+='<div class="card"><h3>Da verificare a bordo</h3><p class="small">Gli orari effettivi, le tariffe e le prenotazioni si consultano su MSC for Me o con il personale.</p></div>';
  return out;
 }
 function onboardExperienceDetails(ex){
@@ -540,6 +549,7 @@ function render(){
  ref("page").querySelectorAll("[data-ship-tab]").forEach(function(b){b.onclick=function(){shipTab=b.dataset.shipTab;shipMapDeck="";onboardPlaceId="";onboardExperienceId="";render()}});
  ref("page").querySelectorAll("[data-open-place]").forEach(function(b){b.onclick=function(){onboardPlaceOrigin=shipTab==="percorsi"?"percorsi":shipTab==="locali"?"locali":"mappa";onboardPlaceId=b.dataset.openPlace;shipTab="mappa";render();window.scrollTo(0,0)}});
  if(ref("backFromPlace"))ref("backFromPlace").onclick=function(){onboardPlaceId="";if(onboardPlaceOrigin==="percorsi")shipTab="percorsi";else if(onboardPlaceOrigin==="locali")shipTab="locali";render();window.scrollTo(0,0)};
+ ref("page").querySelectorAll("[data-related-route]").forEach(function(b){b.onclick=function(){onboardExperienceId=b.dataset.relatedRoute;onboardPlaceId="";shipTab="percorsi";render();window.scrollTo(0,0)}});
  ref("page").querySelectorAll("[data-open-experience]").forEach(function(b){b.onclick=function(){onboardExperienceId=b.dataset.openExperience;render();window.scrollTo(0,0)}});
  if(ref("backFromExperience"))ref("backFromExperience").onclick=function(){onboardExperienceId="";render();window.scrollTo(0,0)};
  ref("page").querySelectorAll("[data-map-deck]").forEach(function(b){b.onclick=function(){shipMapDeck=b.dataset.mapDeck;onboardPlaceId="";render();window.scrollTo(0,0)}});
