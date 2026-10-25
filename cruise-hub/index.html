@@ -400,6 +400,13 @@ function render(){
   var subtitle=u?u.title:p[5],count=notes.length;
   out+='<button type="button" class="stop-card" data-openport="'+esc(p[0])+'"><div class="row"><h3>'+esc(p[1])+' · '+esc(p[2])+'</h3><span class="small">'+esc(p[3])+' → '+esc(p[4])+'</span></div><p style="margin:9px 0;font-size:14px">'+esc(subtitle)+'</p><div class="stop-sub"><span class="small">'+(u?'Itinerario pronto':'Info e attività del giorno')+(count?' · '+count+' note aggiuntive':'')+'</span><span class="stop-pill">Dettagli ›</span></div></button>';
  });
+ var onboardRoutes=onboardDirectory().experiences;
+ if(onboardRoutes.length){
+  out+='<h2>✨ Esperienze sulla nave</h2><p class="small">Percorsi da fare tra uno scalo e l’altro: tocca una proposta per vedere la timeline e i singoli posti.</p>';
+  onboardRoutes.forEach(function(x){
+   out+='<button type="button" class="stop-card" data-route-from-stops="'+esc(x.id)+'"><div class="row"><strong>'+esc(x.title)+'</strong><span class="stop-pill">Apri ›</span></div><p>'+esc(x.summary)+'</p><span class="small">'+esc(x.duration)+'</span></button>';
+  });
+ }
  out+='<div class="card"><p class="small">Vuoi portarli con te senza Internet? Esporta la guida completa dal pulsante qui sotto.</p><button class="btn secondary" id="offlineExport">⬇ Scarica guida offline</button></div>';
  }else if(page==="dettaglio"){
  var p=ports.find(function(x){return x[0]===selectedPort});
@@ -480,7 +487,12 @@ function render(){
  var arr=venues.concat(st.customItems.filter(function(x){return x&&["food","bar"].includes(x.cat)}).map(function(x){return [x.title,x.deck||"?",x.cat,x.price||"extra",x.desc||""]}));
  var shown=arr.filter(function(v){return (filter==="all"||filter===v[2]||filter===v[3]||filter==="favorites"&&st.liked.includes(v[0]))&&v.join(" ").toLowerCase().includes(term.toLowerCase())});
  out+='<div class="card">'+(shown.length?'':'Nessun locale trovato.');
- shown.forEach(function(v){out+='<div class="venue"><div class="row"><div><strong>'+esc(v[0])+'</strong><div class="small">Ponte '+esc(v[1])+' · '+(v[2]==="bar"?"Bar":"Ristorante")+'</div></div><div class="row"><span class="badge '+(v[3]==="extra"?"extra":"")+'">'+esc(v[3])+'</span><button class="fav" data-like="'+esc(v[0])+'" aria-label="Preferito">'+(st.liked.includes(v[0])?"★":"☆")+'</button></div></div><p class="small">'+esc(v[4])+'</p></div>'});
+ shown.forEach(function(v){
+ var place=placeFromName(v[0]);
+ out+='<div class="venue"><div class="row"><div><strong>'+esc(v[0])+'</strong><div class="small">Ponte '+esc(v[1])+' · '+(v[2]==="bar"?"Bar":"Ristorante")+'</div></div><div class="row"><span class="badge '+(v[3]==="extra"?"extra":"")+'">'+esc(v[3])+'</span><button class="fav" data-like="'+esc(v[0])+'" aria-label="Preferito">'+(st.liked.includes(v[0])?"★":"☆")+'</button></div></div><p class="small">'+esc(v[4])+'</p>';
+ if(place)out+='<button class="venue-explore" type="button" data-open-place="'+esc(place.id)+'">💡 Info e consigli ›</button>';
+ out+='</div>';
+});
  out+='</div><p class="small">La disponibilità di locali e prodotti, i turni e i prezzi si verificano a bordo.</p>';
  }
  }else if(page==="checklist"){
@@ -517,6 +529,7 @@ function render(){
  ref("page").innerHTML=out;
  ref("page").querySelectorAll("[data-go]").forEach(function(b){b.onclick=function(){tab(b.dataset.go)}});
  ref("page").querySelectorAll("[data-openport]").forEach(function(b){b.onclick=function(){openPort(b.dataset.openport)}});
+ ref("page").querySelectorAll("[data-route-from-stops]").forEach(function(b){b.onclick=function(){shipTab="percorsi";onboardExperienceId=b.dataset.routeFromStops;onboardPlaceId="";tab("nave")}});
  if(ref("backToStops"))ref("backToStops").onclick=function(){tab("tappe")};
  if(ref("refreshPortTimeline"))ref("refreshPortTimeline").onclick=function(){loadChatUpdates()};
  ref("page").querySelectorAll("[data-timeline-route]").forEach(function(b){b.onclick=function(){portRouteChoice[selectedPort]=b.dataset.timelineRoute;render()}});
