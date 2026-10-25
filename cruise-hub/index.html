@@ -181,7 +181,7 @@ function today(){var d=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Rome",y
 function chatCacheKey(){return "cruise.hub.chat.v1:"+actor.id}
 function chatLabel(cat){return {logistica:"Logistica",ristorazione:"Ristorazione",attivita:"Attività a bordo",escursione:"Escursioni",promemoria:"Promemoria",generale:"Consigli"}[cat]||"Aggiornamento"}
 
-var shipMapHighlights=[["10","Ponte Vienna · cabine"],["6","Reception, World Theatre, Pizza & Burger"],["7","World Theatre, HOLA!, Kaito, Panorama Lounge"],["8","World Promenade, Sweet Temptations, MSC Aurea Spa"],["18","La Plage, Botanic Garden Pool, Zen Pool, Il Mercato"],["19","Doremiland, Mini Club, LEGO, La Brasserie"],["20","MSC Gym Technogym, Sportplex, Aquapark"]];
+var shipMapHighlights=[["5","La Foglia, Luna Park Arena"],["10","Ponte Vienna · cabine"],["6","Reception, World Theatre, Pizza & Burger"],["7","World Theatre, HOLA!, Kaito, Panorama Lounge"],["8","World Promenade, Sweet Temptations, MSC Aurea Spa"],["18","La Plage, Botanic Garden Pool, Zen Pool, Il Mercato"],["19","Doremiland, Mini Club, LEGO, La Brasserie"],["20","MSC Gym Technogym, Sportplex, Aquapark"]];
 var shipMapVenues=[["Cabine · ponte Vienna","10"],["Doremiland / Mini Club","19"],["LEGO / DUPLO","19"],["La Brasserie Buffet","19"],["MSC Gym Technogym","20"],["MSC Sportplex","20"],["Aurora Borealis Aquapark","20"],["Botanic Garden Pool","18"],["La Plage Pool","18"],["Zen Pool adulti","18"],["Il Mercato Buffet","18"],["World Theatre","6 e 7"],["Panorama Lounge","6 e 7"],["Luna Park Arena","5 e 6"],["Reception / Guest Services","6"],["Pizza & Burger","6"],["HOLA! Tacos & Cantina","7"],["Kaito Sushi e Teppanyaki","7"],["Masters of the Sea","7"],["World Promenade","8"],["Sweet Temptations","8"],["MSC Aurea Spa","8"],["Raj Polo Tea House","8"]];
 function isOnboardDirectory(u){return /^onboard-dir-/.test(String(u&&u.slug||""))}
 function onboardDirectory(){
@@ -448,9 +448,9 @@ function render(){
   out+='<input type="search" id="shipMapSearch" placeholder="Cerca: Pescaderia, piscina, teatro..." aria-label="Cerca ponti e locali">';
   out+='<div id="shipMapResults">';
   shipMapHighlights.forEach(function(x){out+='<button type="button" class="stop-card" data-map-deck="'+esc(x[0])+'"><div class="row"><strong>Ponte '+esc(x[0])+'</strong><span class="stop-pill">Esplora ›</span></div><p class="small">'+esc(x[1])+'</p></button>'});
-  out+='<h3>Tutti i luoghi</h3>';
+  out+='<details class="card shipdetail" id="allShipPlaces"><summary>Tutti i luoghi ('+places.length+')</summary><div style="padding:0 12px 12px">';
   places.forEach(function(v){out+='<button type="button" class="stop-card ship-map-place" style="padding:12px;margin:7px 0" data-open-place="'+esc(v.id)+'"><div class="row"><strong>'+esc(v.name)+'</strong><span class="badge">Ponte '+esc(v.deck)+'</span></div></button>'});
-  out+='</div><div class="card"><p class="small">Per la posizione esatta di ascensori e scale:</p><a class="deck-guide-link" href="'+pdfLink+'" target="_blank" rel="noopener noreferrer">📄 Apri piano nave MSC ↗</a></div>';
+  out+='</div></details></div><div class="card"><p class="small">Per la posizione esatta di ascensori e scale:</p><a class="deck-guide-link" href="'+pdfLink+'" target="_blank" rel="noopener noreferrer">📄 Apri piano nave MSC ↗</a></div>';
  }
  }else if(shipTab==="consigli"){
   var general=onboardDirectory().general;
@@ -545,7 +545,7 @@ function render(){
  ref("page").querySelectorAll("[data-map-deck]").forEach(function(b){b.onclick=function(){shipMapDeck=b.dataset.mapDeck;onboardPlaceId="";render();window.scrollTo(0,0)}});
 
  if(ref("clearMapDeck"))ref("clearMapDeck").onclick=function(){shipMapDeck="";onboardPlaceId="";render();window.scrollTo(0,0)};
- var mapQ=ref("shipMapSearch");if(mapQ){mapQ.oninput=function(){var q=mapQ.value.trim().toLowerCase();ref("shipMapResults").querySelectorAll("[data-map-deck],[data-open-place]").forEach(function(el){el.style.display=el.textContent.toLowerCase().includes(q)?"":"none"})}};
+ var mapQ=ref("shipMapSearch");if(mapQ){mapQ.oninput=function(){var q=mapQ.value.trim().toLowerCase(),list=ref("allShipPlaces");if(q&&list)list.open=true;ref("shipMapResults").querySelectorAll("[data-map-deck],[data-open-place]").forEach(function(el){el.style.display=el.textContent.toLowerCase().includes(q)?"":"none"})}};
  if(ref("refreshShipTips"))ref("refreshShipTips").onclick=function(){loadChatUpdates()};
  if(ref("refreshChat"))ref("refreshChat").onclick=function(){loadChatUpdates()};
  var search=ref("searchVenues");if(search){search.oninput=function(){term=search.value;var pos=search.selectionStart;render();ref("searchVenues").focus();ref("searchVenues").setSelectionRange(pos,pos)}} 
