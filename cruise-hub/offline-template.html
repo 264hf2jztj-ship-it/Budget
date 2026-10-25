@@ -27,6 +27,24 @@ details[open] summary{border-bottom:1px solid var(--line);margin-bottom:12px}
 .task{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.task input{width:19px;height:19px}
 input[type=search]{width:100%;font:inherit;padding:12px;border:1px solid #c8dbe4;border-radius:11px}
 .notice{border-left:3px solid #b48319;background:#fcf6e5;padding:12px 15px;margin:12px 0;border-radius:7px;line-height:1.5}
+.tl{margin:16px 0}
+.tl-row{display:grid;grid-template-columns:78px minmax(0,1fr);gap:10px;position:relative;padding-bottom:16px}
+.tl-row:not(:last-child)::before{content:"";position:absolute;left:81px;top:18px;bottom:0;border-left:2px solid #c8dce3}
+.tl-time{font-size:12px;color:#0c6685;font-weight:750;padding-top:3px;line-height:1.3;overflow-wrap:anywhere}
+.tl-in{position:relative;padding-left:12px;min-width:0}
+.tl-in::before{content:"";position:absolute;left:-3px;top:6px;width:10px;height:10px;background:#0b7e9d;border-radius:50%;border:2px solid white;box-shadow:0 0 0 2px #bfdce4}
+.tl-box{background:white;border:1px solid #d9e5eb;border-radius:13px;padding:12px}
+.tl-box h3{margin:0 0 6px;font-size:15px}.tl-box p{font-size:13px;margin:0 0 8px;line-height:1.4}
+.tl-link{display:inline-flex;padding:8px 10px;background:#e9f4f7;color:#0b5c7b;border:1px solid #ccdde5;border-radius:8px;text-decoration:none;font-weight:680;font-size:12px;margin:3px 5px 3px 0}
+.tl-link.book{background:#0b6d8a;color:white;border-color:#0b6d8a}
+.tl-box details{border-top:1px solid #e4ecf0;margin-top:8px;padding-top:7px}
+.tl-box summary{font-size:12px;color:#0c6486;font-weight:650;cursor:pointer}
+.tl-box .more{padding-top:7px;font-size:13px;line-height:1.5}
+.tl-return .tl-box{background:#e9f7f1;border-color:#bedbce}
+.tl-choices{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+.tl-choices button{background:white;border:1px solid #cadde5;border-radius:22px;padding:9px 12px;font-size:13px;color:#31556b;font-weight:750}
+.tl-choices button.on{background:#0b6386;color:white;border-color:#0b6386}
+@media(max-width:390px){.tl-row{grid-template-columns:65px minmax(0,1fr);gap:7px}.tl-row:not(:last-child)::before{left:68px}}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -43,12 +61,41 @@ input[type=search]{width:100%;font:inherit;padding:12px;border:1px solid #c8dbe4
 (function(){
 "use strict";
 var DATA=/*__CRUISE_SNAPSHOT__*/null;
-var page="tappe",chosen="",ship="piscine",checked=(DATA&&DATA.checked||[]).slice();
+var page="tappe",chosen="",ship="piscine",checked=(DATA&&DATA.checked||[]).slice(),routeChoice={};
 var search="";
 var root=document.getElementById("main");
 function esc(v){return String(v==null?"":v).replace(/[&<>"']/g,function(x){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&quot;"}[x]})}
 function dayLabel(date){var p=(DATA.ports||[]).find(function(x){return x[0]===date});return p?(p[1]+" · "+p[2]):date}
 function primary(date){return (DATA.updates||[]).find(function(u){return u.port_date===date&&u.category==="escursione"&&/^escursione-proposta-/.test(u.slug||"")})}
+function isTimeline(u){return /^timeline-20[0-9]{2}-[0-9]{2}-[0-9]{2}$/.test(String(u&&u.slug||""))}
+function portTimeline(date){
+ var row=(DATA.updates||[]).find(function(x){return x.slug==="timeline-"+date});
+ if(!row)return null;
+ try{var obj=JSON.parse(row.body);return obj&&obj.v===1&&Array.isArray(obj.routes)?obj:null}catch(e){return null}
+}
+function safeHref(url){return typeof url==="string"&&/^https:\/\/[^\s"'<>]+$/i.test(url)}
+function timelineHtml(date,timeline){
+ var routes=timeline.routes||[],route=routes.find(function(r){return r.id===routeChoice[date]})||routes[0];
+ if(!route)return '';
+ var result='<div class="card"><strong>Il programma in breve</strong><p>'+esc(timeline.summary||"")+'</p></div>';
+ if(routes.length>1){
+  result+='<h3>Quale percorso?</h3><div class="tl-choices">';
+  routes.forEach(function(r){result+='<button data-route="'+esc(r.id)+'" class="'+(route===r?'on':'')+'">'+esc(r.label)+'</button>'});
+  result+='</div>';
+  if(route.description)result+='<p class="small">'+esc(route.description)+'</p>';
+ }
+ result+='<div class="tl">';
+ (route.steps||[]).forEach(function(step){
+  result+='<div class="tl-row'+(step.flag==="return"?' tl-return':'')+'"><div class="tl-time">'+esc(step.time||"")+'</div><div class="tl-in"><div class="tl-box"><h3>'+esc(step.title||"")+'</h3><p>'+esc(step.short||"")+'</p>';
+  (step.links||[]).filter(function(a){return a&&safeHref(a.url)}).forEach(function(a){result+='<a class="tl-link'+(a.kind==="booking"?' book':'')+'" href="'+esc(a.url)+'" target="_blank" rel="noopener noreferrer">'+esc(a.label||"Sito")+' ↗</a>'});
+  if(step.map)result+='<a class="tl-link" href="https://www.google.com/maps/search/?api=1&amp;query='+encodeURIComponent(step.map)+'" target="_blank" rel="noopener noreferrer">📍 Mappa ↗</a>';
+  if(step.detail)result+='<details><summary>Info utili</summary><div class="more">'+esc(step.detail)+'</div></details>';
+  result+='</div></div></div>';
+ });
+ result+='</div>';
+ if(timeline.warning)result+='<div class="notice"><strong>Da ricordare</strong><div>'+esc(timeline.warning)+'</div></div>';
+ return result;
+}
 function noteDetails(u){
  var body=String(u.body||"").trim(),parts=body.split(/\n\s*\n/g).filter(Boolean);
  if(parts.length===1&&body.length>1000){parts=body.split(/\n(?=[A-ZÀ-Ù][A-ZÀ-Ù 0-9()\/-]{4,65}:)/).filter(Boolean)}
@@ -76,17 +123,19 @@ function render(){
  if(page==="tappe"){
   out='<h2>Itinerario</h2><p class="small">Seleziona uno scalo per vedere il suo programma completo, separato dagli altri giorni.</p>';
   (DATA.ports||[]).forEach(function(p){
-   var u=primary(p[0]),count=(DATA.updates||[]).filter(function(x){return x.port_date===p[0]}).length;
+   var u=primary(p[0]),count=(DATA.updates||[]).filter(function(x){return x.port_date===p[0]&&!isTimeline(x)}).length;
    out+='<button class="linkcard" data-open="'+esc(p[0])+'"><div class="row"><strong>'+esc(p[1])+' · '+esc(p[2])+'</strong><span class="small">'+esc(p[3])+' → '+esc(p[4])+'</span></div><p>'+esc(p[5])+'</p><div class="row"><span class="small">'+(u?"Itinerario dettagliato disponibile":count+" note del giorno")+'</span><span class="pill">Apri dettagli ›</span></div></button>';
   });
  }else if(page==="detail"){
   var p=(DATA.ports||[]).find(function(x){return x[0]===chosen});
   if(!p){page="tappe";render();return}
-  var u=primary(chosen);
-  out='<button class="btn" data-back="1">← Tutte le tappe</button><h2>'+esc(p[1])+' · '+esc(p[2])+'</h2><div class="card"><div class="row"><strong>Scalo</strong><span>'+esc(p[3])+' → '+esc(p[4])+'</span></div><p>'+esc(p[5])+'</p><p class="small">Per l’ultimo imbarco prevale sempre la comunicazione MSC.</p></div>';
-  if(u)out+='<h3>Escursione</h3>'+noteDetails(u);
-  var others=(DATA.updates||[]).filter(function(x){return x.port_date===chosen&&x!==u});
-  if(others.length){out+='<h3>Altre attività e consigli del giorno</h3>';others.forEach(function(x){out+='<details class="card guide"><summary>'+esc(x.title)+'</summary><div class="content">'+esc(x.body)+'</div></details>'})}
+  var u=primary(chosen),timeline=portTimeline(chosen);
+  out='<button class="btn" data-back="1">← Tutte le tappe</button><h2>'+esc(p[1])+' · '+esc(p[2])+'</h2><div class="card"><div class="row"><strong>Scalo</strong><span>'+esc(p[3])+' → '+esc(p[4])+'</span></div><p class="small">Per il rientro prevale sempre l’ultimo imbarco comunicato da MSC.</p></div>';
+  if(timeline)out+=timelineHtml(chosen,timeline);
+  else out+='<div class="card">Timeline non inclusa in questa copia. Consulta gli appunti originali qui sotto.</div>';
+  if(u)out+='<details class="card guide"><summary>Appunti originali e fonti</summary><div class="content">'+esc(u.body)+'</div></details>';
+  var others=(DATA.updates||[]).filter(function(x){return x.port_date===chosen&&x!==u&&!isTimeline(x)});
+  if(others.length){out+='<details class="card guide"><summary>Altri consigli del giorno ('+others.length+')</summary><div class="content">'+others.map(function(x){return '<details class="card guide"><summary>'+esc(x.title)+'</summary><div class="content">'+esc(x.body)+'</div></details>'}).join('')+'</div></details>'}
  }else if(page==="nave"){
   out='<h2>Attività a bordo</h2><div class="actions">'+[["piscine","Piscine"],["sport","Sport"],["spettacoli","Spettacoli"],["bambini","Bambini"],["ristorazione","Ristorazione"]].map(function(p){return '<button data-ship="'+p[0]+'" class="'+(ship===p[0]?"on":"")+'">'+p[1]+'</button>'}).join("")+'</div>';
   var set=(DATA.updates||[]).filter(function(u){return shipKind(u,ship)}),q=search.trim().toLowerCase();
@@ -109,6 +158,7 @@ function render(){
  root.innerHTML=out;
  root.querySelectorAll("[data-open]").forEach(function(b){b.onclick=function(){chosen=b.dataset.open;page="detail";render();window.scrollTo(0,0)}});
  root.querySelectorAll("[data-back]").forEach(function(b){b.onclick=function(){page="tappe";render();window.scrollTo(0,0)}});
+ root.querySelectorAll("[data-route]").forEach(function(b){b.onclick=function(){routeChoice[chosen]=b.dataset.route;render()}});
  root.querySelectorAll("[data-ship]").forEach(function(b){b.onclick=function(){ship=b.dataset.ship;search="";render()}});
  root.querySelectorAll("[data-check]").forEach(function(x){x.onchange=function(){checked=x.checked?checked.concat([x.dataset.check]):checked.filter(function(k){return k!==x.dataset.check})}});
  var qbox=document.getElementById("q");if(qbox){qbox.onchange=function(){search=qbox.value;render()};qbox.onkeydown=function(e){if(e.key==="Enter"){search=qbox.value;render()}}}
